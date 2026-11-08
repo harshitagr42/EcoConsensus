@@ -4,3 +4,4 @@ outputs/
 .env
 .venv
 .DS_Store
+experiment/experiment_data_unzipped
