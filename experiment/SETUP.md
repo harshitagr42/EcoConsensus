@@ -1,6 +1,6 @@
 # Experiment setup (Colab, Kaggle as backup)
 
-The experiment compares four fine-tuning methods (head only, head + last N layers, LoRA, QLoRA) for MuRIL and IndicBERT v2, so that one method per model can be chosen for the final training. It uses **only a small subset of SemEval-2016 Task 6** (climate tweets) in English, the three Hindi variants and the three Bengali variants.
+The experiment compares four fine-tuning methods (head only, head + last N layers, LoRA, QLoRA) for MuRIL and IndicBERT v2, so that one method per model, and for LoRA its hyperparameters, can be chosen for the final training. It runs in two stages: **stage 1** searches LoRA's rank `r`, `alpha`, target modules and learning rate over the grid `LORA_SEARCH` (cell 1) and picks one combination per model on `val`; **stage 2** runs every method with all `SEEDS`, LoRA and QLoRA using that pick. It uses **only a small subset of SemEval-2016 Task 6** (climate tweets) in English, the three Hindi variants and the three Bengali variants.
 
 Files in `experiment/`:
 
@@ -88,9 +88,9 @@ The claim fed to the model is the project's fixed claim, "Climate change and glo
 - [ ] `experiment_data.zip` is in `MyDrive/EcoConsensus/`, and the "Loaded semeval.csv: ..." line in cell 4 shows the rows and 7 language/variant groups you expect.
 - [ ] GPU is T4. Cell 2 prints `Device: cuda`.
 - [ ] Cell 1 `MODELS`: the IndicBERT checkpoint is the one you want (default `ai4bharat/IndicBERTv2-MLM-only`).
-- [ ] For a fast first pass set `SEEDS = [42]` and `EPOCHS = 1` (or `TRAIN_SOURCE_ROWS = 60`). Then go back to the defaults.
+- [ ] For a fast first pass set `SEEDS = [42]`, `EPOCHS = 1` and `SEARCH_MAX_TRIALS = 4` (or `TRAIN_SOURCE_ROWS = 60`). Then go back to the defaults.
 
-Rough time at the defaults (1,260 training rows, 3 epochs, 2 seeds, 2 models, 5 method settings plus QLoRA): **an estimate of roughly 30 to 60 minutes on a T4, not measured.** The first log lines show actual epoch times.
+Rough time at the defaults (1,260 training rows, 3 epochs, 2 models): stage 1 is 36 LoRA combinations x 1 seed x 2 models = 72 short runs, stage 2 is 5 methods x 2 seeds x 2 models = 20 runs. The previous run measured about 10 to 15 s per epoch on a T4, so **an estimate of roughly 1 to 1.5 hours**, most of it stage 1. `SEARCH_MAX_TRIALS = 12` cuts stage 1 to a third. Both stages resume after a disconnect.
 
 Library versions: cell 2 runs `pip install -U transformers peft accelerate mlflow scikit-learn pandas` (+ `bitsandbytes` on Linux), so you get the latest releases. The installed versions are printed and saved in every report. If a new release breaks something, pin versions in `_pip(...)` in cell 2.
 
@@ -103,7 +103,8 @@ Library versions: cell 2 runs `pip install -U transformers peft accelerate mlflo
 5. **Compare against TF-IDF.** Section 4 of the report has Majority and TF-IDF + LR on the same splits. If no transformer beats TF-IDF, say so in the write-up.
 6. **Languages and variants.** Section 6 shows Macro-F1 per language and per script variant. Every variant column has the same tweets, so differences come from the text form (translation quality, romanisation, tokenizer coverage; the `[UNK]` rates in section 2 help to separate these).
 7. **This is in-domain and small.** Train and val are both SemEval tweets, so scores are higher than they will be for training on other data, and the ranking may shift with more data (LoRA and deeper partial fine-tuning usually gain the most). The final training follows `docs/TRD.md`.
-8. **QLoRA** needs CUDA and `bitsandbytes`. If it fails, it is recorded as skipped with the reason, never as zero. For models this small it saves little memory and is slower than LoRA; it is there to show the technique.
+8. **QLoRA** needs CUDA and `bitsandbytes`. If it fails, it is recorded as skipped with the reason, never as zero. For models this small it saves little memory and is slower than LoRA; it is there to show the technique. By default it reuses LoRA's picked hyperparameters (`QLORA_HPARAMS = "from_lora"`), so the LoRA vs QLoRA gap is the cost of quantization alone. `QLORA_BITS = [4, 8]` adds LoRA on an 8-bit base as a second quantization level.
+8a. **The LoRA search uses `val` too.** Its pick, the best epoch and the method ranking all come from `val`, so LoRA-type `val` scores are a little optimistic compared with head-only and last-N (fixed learning rates). Stage 2 uses different seeds from the search (`SEARCH_SEEDS` vs `SEEDS`), and `test` stays the fair check.
 9. **Changing settings.** Results are keyed by a hash of all settings. Change a setting and those runs are recomputed; old results stay in `results/` and are ignored by new reports.
 10. **Record the decision.** Note the report file you base the choice on, with its timestamp and the MLflow run names, and add it to the decision log in `docs/TRD.md`.
 
