@@ -261,7 +261,6 @@ If the ensemble does not beat the best single model, that is a valid result, and
 1. The evaluator's file contains at least a comment text column; labels may or may not be present.
 2. The evaluator's comments are in Hindi, Bengali or romanized text, but `test.py` accepts anything.
 3. Every one of the 3,517 + 90 Pol-NLI rows has all 7 versions available (the request estimates depend on this).
-4. The deadline is about 5 days from 9 Nov 2026.
 
 ## 10. Open items
 
