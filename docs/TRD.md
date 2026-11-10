@@ -17,7 +17,7 @@ Decided once, written down. Any change after sign-off goes in the decision log (
 | **Kaggle Notebooks (T4/P100)** | Same as Colab, as a backup | Same |
 | **LLM provider APIs (2, free tier)** | Stance classification, translation (done once) | Anything needing guaranteed uptime |
 
-Because of the GPU memory limit, **each transformer is trained on its own**, in its own session. Nothing trains two models at once.
+Because of the GPU memory limit, **each transformer is trained on its own GPU**: MuRIL and IndicBERT train **in parallel on two Colab accounts**, each with its own self-contained notebook (decision 19). No session trains two models at once.
 
 ## 2. Python and libraries
 
@@ -106,7 +106,7 @@ EcoConsensus/
 ```
 
 Rules:
-- Notebooks only call code in `src/`. All logic lives in `src/` so the Mac, Colab, `inference.py` and `test.py` run the same code.
+- All logic lives in `src/` so the Mac, `inference.py` and `test.py` run the same code. **Exception:** the two Colab training notebooks (`src/training/train_muril.ipynb`, `train_indicbert.ipynb`) are self-contained single files (decision 19); they read text already cleaned by `src/preprocessing.py` through `prepare_data.py`.
 - `inference.py` and `test.py` import nothing from `src/training/` and never import MLflow.
 
 ## 4. Data contract
@@ -222,13 +222,13 @@ Each script runs alone and can be resumed. (The user's note says `train_infrence
 
 | Script | What it does | Where it runs |
 |---|---|---|
-| `train_transformer.py --model muril` (or `indicbert`) | Trains one transformer with LoRA on `train_base`, early stopping on `val`, checkpoints every epoch, saves the adapter and `run_info.json`, logs to MLflow | Colab / Kaggle |
-| `run_llm_batch.py --provider a --split meta` | Fills the LLM cache for a split in batches, honours the daily budget, resumes from cache | Anywhere with internet |
-| `train_inference.py --split meta` | Runs both fine-tuned transformers on a split and joins the cached LLM answers into one feature table | Colab (needs transformer weights) |
-| `train_meta.py` | Fits the meta-model and its fallback variants on the `meta` feature table and compares with voting | Mac or Colab (CPU is enough) |
-| `notebooks/` | Thin notebooks that mount Drive, set paths and call the scripts above | Colab / Kaggle |
+| `prepare_data.py` | Reads the 7 versions of Pol-NLI train/validation and SemEval, checks row alignment, cleans every comment with `src/preprocessing.py`, deduplicates Pol-NLI train, writes the frozen splits and `data/ecoconsensus_data.zip` | Mac |
+| `train_muril.ipynb`, `train_indicbert.ipynb` | Self-contained: unzip the bundle from Drive, LoRA on `train_base`, early stopping on `val`, checkpoint every epoch (resume = Run all), save adapter + `run_info.json`, MLflow, write `probs_<model>_<split>.csv` for `meta`, `val`, `semeval_test`, zip the results | Colab (one account per model, in parallel) |
+| `run_llm_batch.py --provider a --split meta` | Fills the LLM cache for a split in batches, honours the daily budget, resumes from cache; also `--check`, `--estimate`, `--pilot`, `--score` | Mac (while Colab trains) |
+| `train_inference.py` | Joins the downloaded transformer probabilities with the cached LLM answers into `features_<split>.csv` (no GPU, no requests) | Mac |
+| `train_meta.py` | Fits the meta-model and its fallback variants on the `meta` feature table and compares with voting | Mac (CPU) |
 
-Colab order: train MuRIL → save to Drive → (new session) train IndicBERT → save → run `train_inference.py` for `meta`, `val` and `semeval_test`. Checkpoints go to Drive or Kaggle output, never only to the temporary disk.
+Order: `prepare_data.py` (Mac) → upload the zip to both Drives → run both notebooks at the same time while `run_llm_batch.py` fills the cache on the Mac → unzip `<model>_results.zip` in the project root → `train_inference.py` → `train_meta.py`. Checkpoints go to Drive, never only to the temporary disk. Runbook: `src/training/README.md`.
 
 ## 10. LLM component
 
@@ -345,4 +345,13 @@ On the Mac, small and fast (`tests/`):
 | 15 | `test.py` in repo root; `result.txt` latest + archive | User's decision |
 | 16 | Python 3.13 or newer | User preference; experiment used 3.13.16 |
 | 17 | Bagheli translations discarded; Bengali used | Translation mistake corrected |
-| 18 | Experiment re-run planned: LoRA r / alpha / target modules / learning rate searched on the experiment `val` (stage 1), QLoRA fixed (pooler kept full precision) and reusing LoRA's pick; the fixed values in 8.3 and 8.4 are replaced by the new report's picks | The old fixed values were never tuned; QLoRA had failed because the 4-bit pooler was wrapped by `modules_to_save` |
+| 18 | (Not executed, see 22.) Experiment re-run planned: LoRA r / alpha / target modules / learning rate searched on the experiment `val` (stage 1), QLoRA fixed (pooler kept full precision) and reusing LoRA's pick; the fixed values in 8.3 and 8.4 are replaced by the new report's picks | The old fixed values were never tuned; QLoRA had failed because the 4-bit pooler was wrapped by `modules_to_save` |
+| 19 | MuRIL and IndicBERT trained **in parallel on two Colab accounts**, each from one self-contained notebook (`src/training/train_muril.ipynb`, `train_indicbert.ipynb`) that imports nothing from `src/`; replaces `train_transformer.py` + thin notebooks | User decision: saves a day of GPU time; a single file per account is simpler to run |
+| 20 | Text is cleaned once, in `src/training/prepare_data.py` (through `src/preprocessing.py`); the split CSVs and the Colab bundle hold the cleaned `comment`; the notebooks do no cleaning | One cleaning function, no copy of it in the notebooks |
+| 21 | Pol-NLI train: 1,417 rows whose English text repeats another row are removed (some sentences occur ~100 times, same label and translation), and 64 train groups identical to a `val`/SemEval comment are removed (78 of the 90 `val` comments also occurred in train). Result: `train_base` 1,424 and `meta` 252 source rows (× 7). `--keep-duplicates` / `--keep-cross-duplicates` restore the old behaviour | Duplicates dominated training; overlap with `val` made early stopping optimistic |
+| 22 | LoRA values from the 2026-11-08 report (r 16, alpha 32, dropout 0.1, query+value, lr 3e-4); the re-run of decision 18 was not executed | No time for the re-run |
+| 23 | One seed (42) per transformer | Plan cut-line; GPU time |
+| 24 | Each notebook writes the transformer's probabilities for `meta`, `val`, `semeval_test`; `train_inference.py` only joins them with the LLM cache on the Mac | Adapters live on different Drives; no account needs both |
+| 25 | LLM prompt `v3` in `prompts/stance_system_prompt.md`, built from `LLM_PROMPT.md` (labels FAVOUR / AGAINST / NONE → 0 / 2 / 1); the code reads the prompt from that file | `v2` file was dropped; one source of truth for the code |
+| 26 | Both LLM components use one OpenAI-compatible adapter; provider, model and URL only in `.env` | User decision; covers most free-tier providers |
+| 27 | LLM cache fill and meta-model training run on the Mac (Colab only if memory runs out) | Meta-model is a small logistic regression |

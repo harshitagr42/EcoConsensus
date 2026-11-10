@@ -1,6 +1,6 @@
 # LLM system prompt
 
-**Prompt version:** `v1` (store it in `llm.yaml` as `prompt_version`; never edit a frozen version, create `v2`)
+**The code reads `prompts/stance_system_prompt.md` (version `v3`, built from this document).** This document is the design rationale; edit the prompt file, not this one, and bump its `prompt_version:` line on any change.
 **Used for:** stance classification of comments toward the fixed claim, by both LLM providers
 **Used by:** training runs and `test.py` (batches of 50 or more comments) and `inference.py` (one comment). The same prompt and the same reply format serve both; a single comment is just a batch of one.
 
