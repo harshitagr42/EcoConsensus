@@ -1,0 +1,27 @@
+# LLM layer. Provider, model, key, base URL and daily limit come from .env (LLM_A_*, LLM_B_*).
+# Both components use the OpenAI-compatible chat-completions API (Groq, OpenRouter, Together, Mistral,
+# Gemini's OpenAI endpoint, a local server, ...).
+
+prompt_file: prompts/stance_system_prompt.md
+
+# Set to true once the prompt is chosen on `val` (end of Day 2). run_llm_batch.py refuses to send
+# semeval_test rows while this is false. After freezing, never edit the prompt; bump its version instead.
+prompt_frozen: false
+
+# Few-shot examples: ids from data/processed/train_base.csv (never meta / val / semeval_test).
+# Empty list = zero-shot. Changing the list changes the cache key.
+few_shot_ids: []
+
+batch_size: 50              # default when LLM_BATCH_SIZE is not set in .env
+min_batch_size: 5           # automatic shrinking on token-limit errors stops here
+temperature: 0
+request_timeout_sec: 120
+max_retries: 5              # per request, for transient errors (429 per-minute, 5xx, timeouts)
+backoff_base_sec: 2
+backoff_cap_sec: 90
+json_mode: false            # response_format=json_object cannot return a top-level array; keep off
+extra_body: {}              # merged into every request body (e.g. {"reasoning_effort": "none"} for some providers)
+
+pilot:
+  n_comments: 100
+  batch_sizes: [10, 25, 50, 100]

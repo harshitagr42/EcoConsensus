@@ -1,0 +1,35 @@
+# Transformer components. Training runs in the self-contained Colab notebooks
+# (src/training/train_muril.ipynb, src/training/train_indicbert.ipynb); their CONFIG cell mirrors these values.
+# Local code (train_inference, later test.py / inference.py) reads the model names, adapter folders and max_length here.
+
+max_length: 128
+method: lora
+seed: 42
+
+models:
+  muril:
+    hf_name: google/muril-base-cased
+    adapter_dir: models/finetuned/muril_lora
+  indicbert:
+    hf_name: ai4bharat/IndicBERTv2-MLM-only
+    adapter_dir: models/finetuned/indicbert_lora
+
+# Values from the experiment report of 2026-11-08 (decision log #18 re-run was not executed).
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.1
+  target_modules: [query, value]
+
+training:
+  lr: 3.0e-4
+  weight_decay: 0.01
+  warmup_fraction: 0.1
+  batch_size: 16
+  eval_batch_size: 64
+  max_epochs: 10
+  patience: 2
+  monitor: val_macro_f1
+  grad_clip: 1.0
+  head_dropout: 0.1
+  fp16: true

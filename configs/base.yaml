@@ -1,0 +1,63 @@
+# Shared settings: paths, seed, labels, fixed claim, loader aliases, preprocessing noise list.
+# Paths are relative to the project root.
+
+seed: 42
+
+fixed_claim: "Climate change and global warming is a serious concern."
+
+# Final label ids (do not reorder): 0 favour, 1 neutral, 2 against.
+labels: [favour, neutral, against]
+
+# Raw label value (lower-cased, stripped) -> label name. Used by the evaluator loader and prepare_data.
+label_map:
+  "0": favour
+  "1": neutral
+  "2": against
+  favour: favour
+  favor: favour
+  pro: favour
+  support: favour
+  neutral: neutral
+  none: neutral
+  irrelevant: neutral
+  against: against
+  con: against
+  oppose: against
+
+paths:
+  raw: data/raw
+  processed: data/processed
+  bundle: data/ecoconsensus_data.zip     # uploaded to MyDrive/EcoConsensus/ on both Colab accounts
+  models: models
+  finetuned: models/finetuned
+  baselines: models/finetuned/baselines
+  meta_models: models/finetuned/meta
+  outputs: outputs
+  logs: outputs/logs
+  metrics: outputs/metrics
+  predictions: outputs/predictions
+  reports: outputs/reports
+  cache: outputs/cache
+  prompts: prompts
+
+splits:
+  meta_fraction: 0.15        # share of Pol-NLI train source rows held out for the meta-model
+  names: [train_base, meta, val, semeval_test]
+
+mlflow:
+  tracking_uri: sqlite:///outputs/metrics/mlflow.db
+
+preprocessing:
+  noise_patterns: ['#SemST\b']   # regexes removed before anything else (case-insensitive)
+  drop_leading_rt: true          # "RT @x: ..." -> "@USER: ..."
+  strip_hashtag_symbol: true     # "#climate" -> "climate"
+  handle_token: "@USER"
+  url_token: "URL"
+
+# Column aliases for the flexible loader (matched after strip + lower-case).
+aliases:
+  id: [id, idx, index, sno, s.no, serial, comment_id]
+  comment: [comment, text, tweet, premise, sentence, content, body, review_text, yt_comment]
+  claim: [claim, target, topic, hypothesis, statement]
+  label: [label, stance, class, category, gold, y]
+  language: [language, lang]

@@ -4,4 +4,10 @@ outputs/
 .env
 .venv
 .DS_Store
-experiment/experiment_data_unzipped
+experiment/experiment_data_unzipped/
+__pycache__/
+*.pyc
+.pytest_cache/
+mlruns/
+mlflow.db
+*.ipynb_checkpoints
