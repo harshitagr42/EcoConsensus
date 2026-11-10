@@ -19,6 +19,11 @@ import sys
 import numpy as np
 import pandas as pd
 
+if __package__ in (None, ""):  # started as a file (python src/training/run_llm_batch.py): make the project root importable
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
 from src.config import CFG, FIXED_CLAIM, LABELS, out_path
 from src.data_loading import load_split
 from src.llm_api import (STATUS_MISSING, STATUS_OK, FatalProviderError, LLMComponent, StopRun, cache_key,

@@ -18,6 +18,11 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import FeatureUnion, Pipeline
 
+if __package__ in (None, ""):  # started as a file (python src/baselines.py): make the project root importable
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
 from src.config import LABELS, SEED, out_path, path
 from src.data_loading import load_split
 from src.metrics import bootstrap_macro_f1, compute_metrics, confusion_md

@@ -30,6 +30,11 @@ import joblib
 import numpy as np
 import pandas as pd
 
+if __package__ in (None, ""):  # started as a file (python src/evaluate.py): make the project root importable
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
 from src.baselines import Majority, load_tfidf, pair_text
 from src.config import CFG, LABELS, ROOT, out_path, path
 from src.data_loading import load_split

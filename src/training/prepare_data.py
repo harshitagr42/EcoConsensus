@@ -31,6 +31,11 @@ from datetime import datetime
 
 import pandas as pd
 
+if __package__ in (None, ""):  # started as a file (python src/training/prepare_data.py): make the project root importable
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
 from src.config import BASE, FIXED_CLAIM, L2I, LABELS, ROOT, SEED, out_path, path
 from src.data_loading import read_table
 from src.preprocessing import is_empty, preprocess, script_group

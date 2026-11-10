@@ -21,6 +21,11 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedGroupKFold
 
+if __package__ in (None, ""):  # started as a file (python src/training/train_meta.py): make the project root importable
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
 from src.config import LABELS, ROOT, SEED, out_path, path
 from src.data_loading import load_split
 from src.ensembling import (COMPONENTS, LLMS, TRANSFORMERS, VARIANTS, available, component_pred, majority_vote,
