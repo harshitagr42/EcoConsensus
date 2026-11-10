@@ -2,3 +2,6 @@
 # this file is for running them elsewhere. Colab already ships torch.
 -r requirements.txt
 accelerate==1.15.0
+# Added on Colab (2026-11-10): an older preinstalled torchao clashed with the pinned transformers/peft.
+# The notebooks install their pins with `pip install --upgrade`.
+torchao>=0.16.0

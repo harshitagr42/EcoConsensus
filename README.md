@@ -7,8 +7,10 @@ Stance detection on global warming for Hindi and Bengali comments (CSET 346 NLP 
 | Part | State |
 |---|---|
 | Planning documents (`docs/`) | Written |
-| Experiment (`experiment/prepare_data.py`, `experiment/experiment.ipynb`) | Written for a small SemEval subset (English + 3 Hindi + 3 Bengali variants); smoke-tested end to end locally with a tiny model; not yet run on Colab |
-| `src/`, `test.py`, `inference.py` | Not written yet. They follow the experiment phase and the method choice |
+| Experiment (`experiment/prepare_data.py`, `experiment/experiment.ipynb`) | Done on Colab; LoRA chosen for both models |
+| Data, baselines, LLM layer, stacking scripts (`src/`, `src/training/`) | Written (Days 1–3); runbook in `src/training/README.md` |
+| MuRIL and IndicBERT (LoRA) | Trained on Colab (2026-11-10); scored with `python -m src.evaluate` |
+| `test.py`, `inference.py` | Not written yet (Day 4) |
 
 ## Where to start
 
@@ -24,7 +26,45 @@ Stance detection on global warming for Hindi and Bengali comments (CSET 346 NLP 
 
 ## Repository layout
 
-See `docs/TRD.md` section 2. Short version: `data/` (raw, translated, processed), `experiment/` (notebook, setup, generated reports), `src/` (with `src/training/` for Colab or Kaggle), `models/original` and `models/finetuned`, `outputs/` (logs, metrics, predictions, cache), `test/` (evaluator data and results), `docs/`, `prompts/`.
+See `docs/TRD.md` section 3. Short version: `data/` (raw, translated, processed), `experiment/` (notebook, setup, generated reports), `src/` (with `src/training/` for data preparation and the Colab notebooks), `models/original` and `models/finetuned`, `outputs/`, `test/` (evaluator data and results), `tests/` (unit tests), `docs/`, `prompts/`.
+
+`outputs/` has one folder per component, each with the same four subfolders:
+
+```text
+outputs/
+├── prepare_data/   baselines/   muril/   indicbert/   llm/   ensemble/   evaluate/   inference/   test/
+│   ├── logs/          # timestamped .txt run logs
+│   ├── metrics/       # mlflow.db (one per component), metrics JSON/CSV
+│   ├── predictions/   # prediction, probability and feature CSVs
+│   └── reports/       # generated Markdown reports
+└── llm/cache/         # LLM answers (append-only) and daily usage counters
+```
+
+Open one component's MLflow runs with `mlflow ui --backend-store-uri sqlite:///outputs/<component>/metrics/mlflow.db`.
+
+## Library versions
+
+Local (Mac / Linux / Windows): `pip install -r requirements.txt` (Python 3.13). The Colab training notebooks install
+their own pins in cell 2: `transformers==5.22.2`, `peft==0.21.2`, `accelerate==1.15.0`, `mlflow==3.18.0` and
+`torchao>=0.16.0`, with `pip install --upgrade`, on top of Colab's `torch 2.14.1+cu130` (Python 3.13.16, T4). The
+`torchao` pin and `--upgrade` avoid a clash with Colab's preinstalled packages. Full table: `docs/TRD.md` section 2.
+
+## Running the tests
+
+```bash
+source .venv/bin/activate
+pip install -r requirements.txt
+python -m pytest -v tests              # one line per test: PASSED / FAILED / SKIPPED
+python -m pytest -v -rA tests          # plus a summary of every outcome at the end
+python -m pytest -rfE tests            # only list what failed or errored
+python -m pytest tests/test_metrics.py -v              # one file
+python -m pytest tests -k "leakage" -v                 # tests whose name matches
+python -m pytest tests -v --junitxml=pytest-report.xml # machine-readable report
+```
+
+Tests in `tests/test_splitting.py` that read the frozen splits are skipped until `python -m src.training.prepare_data`
+has been run. GitHub Actions (`.github/workflows/tests.yml`) runs the suite on every push to every branch; the result
+per test is on the run's summary page and in the `pytest-report` artifact.
 
 ## Configuration and secrets
 
@@ -33,10 +73,11 @@ Copy `.env.example` to `.env` and fill in the two LLM providers' details. `.env`
 ## Workflow
 
 1. Experiment (Colab): `prepare_data.py` builds a small SemEval subset as `experiment_data.zip`; upload it to Drive; the notebook compares head, head + last layers, LoRA and QLoRA for both models and writes results, MLflow and reports to Drive; read the report; choose one method per model.
-2. Final training on Colab, **one transformer at a time** (about 15 GB VRAM): MuRIL, then IndicBERT.
-3. `train_inference.py` builds the meta-model's input features from both fine-tuned transformers and both LLMs (batched, cached).
-4. `train_meta.py` trains the meta-model.
-5. `test.py` evaluates a dataset placed in `test/`; `inference.py` classifies single comments.
+2. `python -m src.training.prepare_data` builds the cleaned splits and `data/ecoconsensus_data.zip`; upload it to Drive.
+3. Final training on Colab: MuRIL and IndicBERT **in parallel on two accounts** (`src/training/train_<model>.ipynb`); unzip each `<model>_results.zip` in the project root. Meanwhile `run_llm_batch.py` fills the LLM cache on the Mac.
+4. `train_inference.py` joins both transformers' probabilities and both LLMs' cached answers into feature tables; `train_meta.py` trains the meta-model.
+5. `python -m src.evaluate` scores every model and writes a report to `outputs/evaluate/`.
+6. `test.py` evaluates a dataset placed in `test/`; `inference.py` classifies single comments (Day 4).
 
 ## Data
 

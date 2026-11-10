@@ -1,0 +1,78 @@
+# Unit tests (tests/) on every push to every branch.
+# torch / transformers / peft are left out: no unit test needs them, and they would add several GB to each run.
+# data/ is git-ignored, so the tests that read the frozen splits are skipped here (they run locally).
+name: tests
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies (without torch / transformers / peft)
+        run: |
+          grep -v -E '^(torch|transformers|peft)([=<>~! ]|$)' requirements.txt > requirements-ci.txt
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-ci.txt
+
+      - name: Run pytest
+        run: python -m pytest tests -v -rA --junitxml=pytest-report.xml
+
+      - name: Write per-test results to the run summary
+        if: always()
+        run: |
+          python - <<'EOF'
+          import os
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          p = Path("pytest-report.xml")
+          out = []
+          if not p.exists():
+              out.append("No pytest report was produced (the run failed before the tests started).")
+          else:
+              rows, counts = [], {"passed": 0, "failed": 0, "error": 0, "skipped": 0}
+              for tc in ET.parse(p).getroot().iter("testcase"):
+                  kind = next((c.tag for c in tc if c.tag in ("failure", "error", "skipped")), "passed")
+                  key = {"failure": "failed"}.get(kind, kind)
+                  counts[key] += 1
+                  icon = {"passed": "✅", "failed": "❌", "error": "💥", "skipped": "⏭️"}[key]
+                  msg = next((c.get("message", "") for c in tc if c.tag != "system-out"), "")
+                  msg = msg.splitlines()[0][:120].replace("|", "\\|") if msg else ""
+                  rows.append(f"| {icon} {key} | `{tc.get('classname')}::{tc.get('name')}` | {msg} |")
+              out.append("## Test results")
+              out.append(" · ".join(f"**{k}** {v}" for k, v in counts.items()))
+              out.append("")
+              out.append("| result | test | message |")
+              out.append("|---|---|---|")
+              out.extend(rows)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+              f.write("\n".join(out) + "\n")
+          EOF
+
+      - name: Upload the pytest report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-report
+          path: pytest-report.xml
+          if-no-files-found: ignore

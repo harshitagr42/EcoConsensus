@@ -19,6 +19,9 @@ The splits are frozen: re-running `prepare_data` only re-zips them; `--overwrite
 2. Account 1: open `src/training/train_muril.ipynb` → T4 GPU → Run all.
    Account 2: open `src/training/train_indicbert.ipynb` → T4 GPU → Run all.
    Disconnected? Reconnect and Run all again: it resumes from the last finished epoch.
+   Cell 2 installs `transformers==5.22.2`, `peft==0.21.2`, `accelerate==1.15.0`, `mlflow==3.18.0` and `torchao>=0.16.0`
+   with `pip install --upgrade` (needed to avoid a clash with Colab's preinstalled packages; Colab's torch 2.14.1 is kept).
+   Exact versions of a run are in `models/finetuned/<model>_lora/run_info.json` (`env`).
 3. When each finishes, download `MyDrive/EcoConsensus/outputs_<model>/<model>_results.zip` and unzip it in the project root:
    `unzip -o muril_results.zip -d .` (same for indicbert). This fills `models/finetuned/<model>_lora/` and
    `outputs/<model>/` (`predictions/probs_<model>_{meta,val,semeval_test}.csv`, `metrics/mlflow.db`,

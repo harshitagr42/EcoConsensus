@@ -38,6 +38,25 @@ Because of the GPU memory limit, **each transformer is trained on its own GPU**:
 | `python-dotenv` | latest | Read `.env` |
 | `pyyaml`, `requests`, `joblib`, `openpyxl` | latest | Config, HTTP, saving sklearn models, XLSX input |
 
+**Versions used for the final training (Colab, 2026-11-10, both notebooks, T4 GPU):** read from each adapter's
+`run_info.json` (`env`). Cell 2 of each notebook installs `PINNED` with `pip install --upgrade`; `torchao` was added
+and `--upgrade` turned on because the packages Colab ships clashed with the pinned `transformers` / `peft` /
+`accelerate` (an older preinstalled `torchao` breaks the import). Keep these pins when re-running the notebooks.
+
+| Library | Version on Colab | How it got there |
+|---|---|---|
+| Python | 3.13.16 | Colab runtime |
+| `torch` | 2.14.1+cu130 | Colab runtime (not reinstalled) |
+| `transformers` | 5.22.2 | `PINNED` |
+| `peft` | 0.21.2 | `PINNED` |
+| `accelerate` | 1.15.0 | `PINNED` |
+| `mlflow` | 3.18.0 | `PINNED` |
+| `torchao` | `>=0.16.0` (latest at install time; the exact version is not logged) | `PINNED`, added to avoid the clash |
+| `scikit-learn` | 1.9.1 | `pip install --upgrade` (unpinned, matched the tested version) |
+| `pandas` | 3.1.1 | `pip install --upgrade` (unpinned, matched the tested version) |
+
+`bitsandbytes` is not installed by the final notebooks (LoRA only). `requirements-train.txt` lists the same pins.
+
 Two requirement files: `requirements.txt` (inference, `test.py`, baselines, reports; **no** `bitsandbytes`) and `requirements-train.txt` (adds training extras for Colab and Kaggle).
 
 All sources, creators and licences are listed in `REFERENCES.md`.
@@ -75,12 +94,13 @@ EcoConsensus/
 │       ├── indicbert_lora/
 │       ├── baselines/            # tfidf_lr.joblib, majority.json
 │       └── meta/                 # meta_all4, meta_no_llm_a, meta_no_llm_b, meta_transformers
-├── outputs/
-│   ├── logs/                     # timestamped .txt run logs
-│   ├── metrics/                  # metrics JSON, mlflow.db
-│   ├── predictions/              # per-component prediction CSVs
-│   ├── reports/                  # generated .md reports (timestamped)
-│   └── cache/                    # LLM answers, one record per comment
+├── outputs/                      # one folder per component (decision 28), all git-ignored
+│   ├── <component>/              # prepare_data, baselines, muril, indicbert, llm, ensemble, evaluate, inference, test
+│   │   ├── logs/                 # timestamped .txt run logs
+│   │   ├── metrics/              # mlflow.db (one per component), metrics JSON/CSV
+│   │   ├── predictions/          # prediction / probability / feature CSVs
+│   │   └── reports/              # generated .md reports (timestamped)
+│   └── llm/cache/                # LLM answers, one record per comment + daily usage counters
 ├── papers/
 ├── src/
 │   ├── __init__.py
@@ -96,7 +116,8 @@ EcoConsensus/
 │   ├── reporting.py              # deterministic report writer, never overwrites
 │   ├── pipeline.py               # shared "run components on rows" code for inference/test
 │   ├── utils.py                  # seeding, logging, safe file writing
-│   └── training/                 # Colab / Kaggle scripts (section 9)
+│   ├── evaluate.py               # metrics + report for every model that has outputs
+│   └── training/                 # prepare_data, Colab notebooks, LLM batch, features, meta-model (section 9)
 ├── test/                         # evaluator file goes here; results are written here too
 │   ├── result.txt                # latest report (created by test.py)
 │   ├── predictions.csv           # latest prediction file (created by test.py)
@@ -227,8 +248,9 @@ Each script runs alone and can be resumed. (The user's note says `train_infrence
 | `run_llm_batch.py --provider a --split meta` | Fills the LLM cache for a split in batches, honours the daily budget, resumes from cache; also `--check`, `--estimate`, `--pilot`, `--score` | Mac (while Colab trains) |
 | `train_inference.py` | Joins the downloaded transformer probabilities with the cached LLM answers into `features_<split>.csv` (no GPU, no requests) | Mac |
 | `train_meta.py` | Fits the meta-model and its fallback variants on the `meta` feature table and compares with voting | Mac (CPU) |
+| `src/evaluate.py` | Scores every model with outputs (baselines, transformers, LLM cache, votes, stacked) on `val`, `meta`, `semeval_test`; report in `outputs/evaluate/` | Mac (CPU) |
 
-Order: `prepare_data.py` (Mac) → upload the zip to both Drives → run both notebooks at the same time while `run_llm_batch.py` fills the cache on the Mac → unzip `<model>_results.zip` in the project root → `train_inference.py` → `train_meta.py`. Checkpoints go to Drive, never only to the temporary disk. Runbook: `src/training/README.md`.
+Order: `prepare_data.py` (Mac) → upload the zip to both Drives → run both notebooks at the same time while `run_llm_batch.py` fills the cache on the Mac → unzip `<model>_results.zip` in the project root (fills `models/finetuned/<model>_lora/` and `outputs/<model>/`) → `train_inference.py` → `train_meta.py` → `src/evaluate.py`. Checkpoints go to Drive, never only to the temporary disk. Runbook: `src/training/README.md`.
 
 ## 10. LLM component
 
@@ -304,6 +326,10 @@ Macro-F1 (primary, labels fixed to the 3 classes so a missing class scores 0), a
 One `.txt` file per run in `outputs/<component>/logs/`: `<run_type>_<YYYYMMDD_HHMMSS>.txt`. Contents: timestamp, command line, config summary and versions, input pointer and row counts, preprocessing summary, per-comment outputs (when small), warnings (parse errors, API failures, dropped rows, fallbacks), metrics. Python `logging` with a file handler and console output. Keys are never logged.
 
 ## 18. Testing
+
+Run: `python -m pytest -v tests` (`-rA` adds a pass/fail/skip line per test at the end). GitHub Actions runs the same
+suite on every push to every branch (`.github/workflows/tests.yml`, Python 3.13, `requirements.txt` without
+`torch`/`transformers`/`peft`). `data/` is not in git, so the tests that read the frozen splits are skipped there.
 
 On the Mac, small and fast (`tests/`):
 - Preprocessing (emoji kept, `@USER`, `URL`, `#SemST`, Hindi and Bengali strings, empty text)

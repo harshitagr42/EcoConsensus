@@ -19,9 +19,12 @@ Phase 1 (experiment, `experiment/`) is done: LoRA chosen for both models. Phase 
 - `src/training/train_muril.ipynb`, `train_indicbert.ipynb`: **self-contained** Colab notebooks (no `src/` imports, no cleaning),
   run in parallel on two accounts; they write `<model>_results.zip` with project-relative paths (adapter, `probs_<model>_<split>.csv`).
   The two notebooks are identical except for the model lines in CONFIG; edit both the same way.
+  Their `PINNED` list (cell 1: transformers 5.22.2, peft 0.21.2, accelerate 1.15.0, mlflow 3.18.0, `torchao>=0.16.0`,
+  installed with `pip install --upgrade`) was set by the user to fix Colab library clashes; do not drop torchao or `--upgrade`.
+  The notebooks are committed with their Colab outputs; patch cells in place rather than regenerating them.
 - `src/training/run_llm_batch.py`, `train_inference.py` (joins probs + LLM cache → `features_<split>.csv`), `train_meta.py`.
 - `src/evaluate.py`: scores every model that has outputs (baselines, both transformers, LLM cache, votes, stacked) → `outputs/evaluate/`.
-- `tests/` (pytest). Not written yet (Day 4+): `src/pipeline.py`, `test.py`, `inference.py`, README.
+- `tests/` (pytest; CI: `.github/workflows/tests.yml` runs them on every push, without torch, `data/` tests skip). Not written yet (Day 4+): `src/pipeline.py`, `test.py`, `inference.py`, README.
 
 Specs: `docs/TRD.md` (decision log §20 — append when a decision changes), `docs/STACKING_ENSEMBLE.md`, `docs/APP_FLOW.md`,
 `docs/IMPLEMENTATION_PLAN.md`, `docs/INFERENCE.md`, `docs/TESTING.md`. The LLM prompt the code reads is
@@ -35,7 +38,7 @@ Local env is a Python 3.13 venv at `.venv` (Mac M3, 8 GB — no local fine-tunin
 source .venv/bin/activate
 python -m src.training.prepare_data [--overwrite-splits]
 python -m src.baselines
-python -m pytest -q tests
+python -m pytest -v -rA tests          # per-test pass/fail/skip
 python -m src.training.run_llm_batch --provider a b --split meta val [--check|--pilot|--estimate|--score]
 python -m src.training.train_inference
 python -m src.training.train_meta

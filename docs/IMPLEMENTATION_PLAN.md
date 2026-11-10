@@ -16,6 +16,7 @@ Each stage lists what it delivers and what you sign off before the next one star
 - Method comparison on the SemEval subset (300 tweets × 7 versions, 2 seeds): head only, last 2, last 4, LoRA, QLoRA.
 - Result: LoRA recommended for MuRIL and IndicBERT; QLoRA failed in all four runs (reported as not run).
 - Tested environment: Python 3.13.16, transformers 5.22.2, torch 2.14.1, peft 0.21.2.
+- Final training (Colab, 2026-11-10): same versions (torch 2.14.1+cu130), plus `torchao>=0.16.0` and `pip install --upgrade` in the notebooks to avoid a clash with Colab's preinstalled packages (TRD §2).
 - Output: `experiment/experiment_outputs/` (report, results, predictions, MLflow database).
 
 Carry-over to the build: the weak `against` class (IndicBERT/LoRA scored 0.044 F1 on `against` in the held-out check), and the fact that SemEval was used to choose methods (say so in the report).
