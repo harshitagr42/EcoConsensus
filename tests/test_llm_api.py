@@ -143,8 +143,9 @@ def http_client(*responses):
 @pytest.mark.parametrize("status,message,error,category", [
     (401, "Invalid API Key", "FatalProviderError", "AUTH ERROR"),
     (404, "model not found", "FatalProviderError", "NOT FOUND"),
-    (429, "Rate limit reached on tokens per minute (TPM): Limit 8000", "TokenLimitError", "RATE LIMIT (tokens"),
-    (429, "Rate limit reached on requests per minute (RPM)", "TransientError", "RATE LIMIT (requests"),
+    (429, "on tokens per minute (TPM): Limit 8000, Used 5505, Requested 2886.", "RateLimited", "RATE LIMIT (tokens"),
+    (429, "on tokens per minute (TPM): Limit 8000, Used 10, Requested 9000.", "TokenLimitError", "REQUEST TOO LARGE"),
+    (429, "Rate limit reached on requests per minute (RPM)", "RateLimited", "RATE LIMIT (requests"),
     (429, "Rate limit reached on requests per day (RPD)", "DailyLimitReached", "DAILY QUOTA"),
     (503, "overloaded", "TransientError", "PROVIDER ERROR"),
     (400, "unknown parameter reasoning_effort", "FatalProviderError", "BAD REQUEST"),
@@ -206,3 +207,50 @@ def test_stop_reason_names_the_cause(tmp_path):
     c = comp(tmp_path, Stub(junk=True), bs=2)
     c.run(["a", "b", "c", "d", "e", "f", "g", "h"])
     assert c.stopped and c.stopped.startswith("UNPARSEABLE REPLY") and "sorry" in c.stopped
+
+
+class Busy(Stub):
+    """Per-minute rate limit: the first `n` requests are rejected with a 429 that the batch fits into."""
+
+    def __init__(self, n):
+        super().__init__()
+        self.n = n
+
+    def chat(self, system, user, max_tokens):
+        from src.llm_api import RateLimited
+        if self.n:
+            self.n -= 1
+            raise RateLimited("TPM: Limit 8000, Used 7000, Requested 2000", retry_after=3, category="RATE LIMIT")
+        return super().chat(system, user, max_tokens)
+
+
+def test_rate_limit_waits_and_resends_same_batch(tmp_path):
+    waits = []
+    stub = Busy(3)
+    c = LLMComponent("a", client=stub, batch_size=4, cache_dir=tmp_path, sleep=waits.append)
+    res = c.run(["a hoax", "serious", "x", "y", "z"])
+    assert all(r["status"] == "ok" for r in res)
+    assert c.batch_size == 4 and stub.sizes == [4, 1]           # batch never shrunk, nothing split
+    assert c.stats["requests"] == 2 and c.budget.today == 2      # rejected 429s are not counted
+    assert c.stats["rate_limit_waits"] == 3 and waits == [3.5, 3.5, 3.5]
+
+
+class Window(Stub):
+    """Reports a tokens-per-minute window in last_info like the real client."""
+
+    def chat(self, system, user, max_tokens):
+        self.last_info = {"tokens_left": 100, "tokens_reset_sec": 12.0, "usage": {"prompt_tokens": 500}}
+        return super().chat(system, user, max_tokens)
+
+
+def test_paces_when_window_is_nearly_used(tmp_path):
+    waits = []
+    c = LLMComponent("a", client=Window(), batch_size=2, cache_dir=tmp_path, sleep=waits.append)
+    c.run(["a", "b", "c", "d"])
+    assert waits == [12.5] and c.stats["rate_limit_waits"] == 1   # waited once before the second request
+
+
+def test_duration_parsing():
+    from src.llm_api import _duration
+    assert _duration("3") == 3 and _duration("54.187ms") == 0.054187 and _duration("1m30.5s") == 90.5
+    assert _duration("5h24m0s") == 5 * 3600 + 24 * 60 and _duration(None) is None

@@ -70,6 +70,11 @@ class TransientError(LLMError):
     pass
 
 
+class RateLimited(TransientError):
+    """HTTP 429 for a per-minute window (requests or tokens) that this request fits into: wait, resend unchanged.
+    The provider does not count a rejected request against the daily quota, so neither does the budget guard."""
+
+
 class FatalProviderError(LLMError):
     """Bad key, unknown model, bad URL: retrying will not help."""
 
@@ -314,6 +319,8 @@ class OpenAICompatibleClient:
             raise TransientError(f"could not connect to {self.cfg.base_url}: {str(e)[:150]}",
                                  category="NETWORK ERROR (your connection or the provider is down)") from None
         limits = _limit_headers(r)
+        self.last_info = dict(tokens_left=_int(r.headers.get("x-ratelimit-remaining-tokens")),
+                              tokens_reset_sec=_duration(r.headers.get("x-ratelimit-reset-tokens")))
         if r.status_code == 200:
             try:
                 data = r.json()
@@ -323,7 +330,7 @@ class OpenAICompatibleClient:
                 raise TransientError(f"unexpected 200 body: {r.text[:200]}",
                                      category="BAD RESPONSE (provider side)") from None
             reasoning = msg.get("reasoning") or msg.get("reasoning_content") or ""
-            self.last_info = dict(finish_reason=choice.get("finish_reason"), usage=data.get("usage") or {},
+            self.last_info.update(finish_reason=choice.get("finish_reason"), usage=data.get("usage") or {},
                                   reasoning_chars=len(reasoning), refusal=msg.get("refusal"),
                                   max_tokens=max_tokens, seconds=round(time.perf_counter() - t0, 1), limits=limits)
             return msg.get("content") or ""
@@ -341,8 +348,13 @@ class OpenAICompatibleClient:
             if not per_minute and any(h in low for h in _DAILY_HINTS):
                 raise DailyLimitReached(where, ra, category="DAILY QUOTA USED UP (provider limit; resume tomorrow)")
             if any(h in low for h in _TOKEN_HINTS) or "token" in low:
-                raise TokenLimitError(where, ra, category="RATE LIMIT (tokens per minute; batch gets smaller)")
-            raise TransientError(where, ra, category="RATE LIMIT (requests per minute; waiting, then retrying)")
+                m = re.search(r"limit\D{0,3}(\d+)\D+used\D{0,3}(\d+)\D+requested\D{0,3}(\d+)", low)
+                if m and int(m.group(3)) > int(m.group(1)):     # this request alone is bigger than the whole window
+                    raise TokenLimitError(where, ra, category="REQUEST TOO LARGE for the tokens-per-minute limit "
+                                                              "(batch gets smaller)")
+                raise RateLimited(where, ra, category="RATE LIMIT (tokens per minute; waiting, then resending the "
+                                                      "same batch)")
+            raise RateLimited(where, ra, category="RATE LIMIT (requests per minute; waiting, then resending)")
         if r.status_code == 413 or (r.status_code == 400 and any(h in low for h in _TOKEN_HINTS)):
             raise TokenLimitError(where, ra, category="REQUEST TOO LARGE (batch gets smaller)")
         if r.status_code >= 500 or r.status_code == 408:
@@ -397,17 +409,32 @@ def explain_unusable(text: str, info: dict, n: int, slot: str) -> str:
             f"Reply starts: {text[:200]!r}")
 
 
+def _duration(v) -> float | None:
+    """Seconds from "2", "2.5s", "54.187ms", "1m30.5s", "5h24m0s"."""
+    if not v:
+        return None
+    m = re.match(r"^\s*([\d.]+)\s*(ms|s)?\s*$", str(v))
+    if m:
+        return float(m.group(1)) / (1000 if m.group(2) == "ms" else 1)
+    m = re.findall(r"([\d.]+)(ms|h|m|s)", str(v))
+    if m:
+        return sum(float(x) * {"h": 3600, "m": 60, "s": 1, "ms": 0.001}[u] for x, u in m)
+    return None
+
+
+def _int(v) -> int | None:
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return None
+
+
 def _retry_after(r) -> float | None:
-    for h in ("retry-after", "x-ratelimit-reset-requests", "x-ratelimit-reset-tokens"):
-        v = r.headers.get(h)
-        if not v:
-            continue
-        m = re.match(r"^\s*([\d.]+)\s*(ms|s)?\s*$", v)
-        if m:
-            return float(m.group(1)) / (1000 if m.group(2) == "ms" else 1)
-        m = re.findall(r"([\d.]+)(h|m|s)", v)          # e.g. "1m30.5s"
-        if m:
-            return sum(float(x) * {"h": 3600, "m": 60, "s": 1}[u] for x, u in m)
+    """retry-after first (it is the exact wait for this request), then the window resets."""
+    for h in ("retry-after", "x-ratelimit-reset-tokens", "x-ratelimit-reset-requests"):
+        d = _duration(r.headers.get(h))
+        if d is not None:
+            return d
     return None
 
 
@@ -442,10 +469,14 @@ class LLMComponent:
         self.sleep = sleep
         self.max_requests = max_requests          # optional cap for this run (on top of the daily budget)
         self.stats = dict(requests=0, cache_hits=0, sent=0, ok=0, unavailable=0, parse_failures=0,
-                          missing_ids=0, token_backoffs=0, retries=0, errors={})
-        self.token_scale = 1.0                    # doubled when replies are cut off at max_tokens
+                          missing_ids=0, token_backoffs=0, retries=0, rate_limit_waits=0, errors={})
+        self.reasoning_tokens = int(LLM_CFG.get("reasoning_tokens", 0))   # grows when replies are cut off
+        self._tokens_left: int | None = None      # tokens-per-minute window, from the last reply's headers
+        self._tokens_reset: float | None = None
+        self._last_cost: int | None = None        # prompt + max_tokens of the last accepted request
         self.last_problem: str | None = None
         self.stopped: str | None = None           # reason if the run stopped early
+        self.interrupted = False                  # Ctrl+C: answers so far are cached, the caller stops
         self._empty_streak = 0
         self._partial: dict[str, int | None] = {}
 
@@ -455,8 +486,21 @@ class LLMComponent:
 
     # -- one HTTP request with retries; returns {local id: label}
     def _max_tokens(self, n: int) -> int:
+        """Answer tokens per comment + a fixed extra + a reasoning allowance (0 until a reply is cut off)."""
         base = LLM_CFG.get("max_tokens_per_comment", 20) * n + LLM_CFG.get("max_tokens_extra", 50)
-        return int(min(LLM_CFG.get("max_tokens_cap", 8192), base * self.token_scale))
+        return int(min(LLM_CFG.get("max_tokens_cap", 8192), base + self.reasoning_tokens))
+
+    def _pace(self) -> None:
+        """Wait for the tokens-per-minute window when the last reply said too few tokens are left for another
+        request of the same size. Avoids sending requests that would only come back as 429."""
+        if self._tokens_left is None or self._last_cost is None or self._tokens_left >= self._last_cost:
+            return
+        wait = min(65.0, (self._tokens_reset or 10.0) + 0.5)
+        log.info("%s: %d tokens left in this minute, the next request needs ~%d; waiting %.0fs", self.name,
+                 self._tokens_left, self._last_cost, wait)
+        self.stats["rate_limit_waits"] += 1
+        self.sleep(wait)
+        self._tokens_left = None
 
     def _ask(self, comments: list[str]) -> dict[int, int]:
         if self.max_requests is not None and self.stats["requests"] >= self.max_requests:
@@ -464,21 +508,27 @@ class LLMComponent:
         self.budget.check()
         user = self.prompt.user_message(comments)
         slot = f"LLM_{self.cfg.slot.upper()}"
-        attempt = 0
+        attempt = waits = 0
+        max_waits = int(LLM_CFG.get("max_rate_limit_waits", 30))
+        cap = LLM_CFG.get("max_tokens_cap", 8192)
         while True:
             max_tokens = self._max_tokens(len(comments))
+            self._pace()
             try:
                 self.budget.record()
                 self.stats["requests"] += 1
                 text = self.client.chat(self.prompt.system, user, max_tokens)
                 info = dict(getattr(self.client, "last_info", None) or {}, max_tokens=max_tokens)
+                self._tokens_left, self._tokens_reset = info.get("tokens_left"), info.get("tokens_reset_sec")
+                prompt_tokens = (info.get("usage") or {}).get("prompt_tokens")
+                self._last_cost = prompt_tokens + max_tokens if prompt_tokens else None
                 got = parse_reply(text, len(comments))
-                if (len(got) < len(comments) and info.get("finish_reason") == "length"
-                        and max_tokens < LLM_CFG.get("max_tokens_cap", 8192)):
-                    self.token_scale *= 2
+                if len(got) < len(comments) and info.get("finish_reason") == "length" and max_tokens < cap:
+                    self.reasoning_tokens = max(256, 2 * self.reasoning_tokens)
                     self._count("OUTPUT CUT OFF (max_tokens raised)")
-                    log.warning("%s: %s Raising max_tokens to %d for the rest of the run and resending.", self.name,
-                                explain_unusable(text, info, len(comments), slot), self._max_tokens(len(comments)))
+                    log.warning("%s: %s Adding %d tokens for reasoning (max_tokens %d for this batch) and resending.",
+                                self.name, explain_unusable(text, info, len(comments), slot), self.reasoning_tokens,
+                                self._max_tokens(len(comments)))
                     continue
                 if got:
                     self._empty_streak = 0
@@ -496,6 +546,21 @@ class LLMComponent:
                         raise stop
                 self.stats["missing_ids"] += len(comments) - len(got)
                 return got
+            except RateLimited as e:
+                # rejected, so not a used request (the provider does not count it either); wait and resend as is
+                self.budget.record(-1)
+                self.stats["requests"] -= 1
+                self.stats["rate_limit_waits"] += 1
+                self._count(e.category)
+                waits += 1
+                if waits > max_waits:
+                    raise ProviderUnavailable(f"still rate-limited after {max_waits} waits. Last error: {e}",
+                                              category=e.category) from None
+                wait = min(65.0, (e.retry_after or 10.0) + 0.5)
+                log.info("%s: %s; waiting %.1fs. (%s)", self.name, e.category, wait, e)
+                self.sleep(wait)
+                self._tokens_left = None
+                self.budget.check()
             except TransientError as e:
                 attempt += 1
                 self._count(e.category)
@@ -509,7 +574,12 @@ class LLMComponent:
                             LLM_CFG.get("max_retries", 5), wait)
                 self.sleep(wait)
                 self.budget.check()
-            except (TokenLimitError, StopRun, FatalProviderError) as e:
+            except TokenLimitError as e:
+                self.budget.record(-1)            # rejected before any work
+                self.stats["requests"] -= 1
+                self._count(e.category)
+                raise
+            except (StopRun, FatalProviderError) as e:
                 if not getattr(e, "counted", False):
                     self._count(e.category)
                 raise
@@ -598,11 +668,15 @@ class LLMComponent:
                 batch = todo[i:i + self.batch_size]
                 try:
                     res = self.classify_batch(batch)
-                except StopRun as e:
+                except (StopRun, KeyboardInterrupt) as e:
                     partial = [(k, l, STATUS_OK) for k, l in self._partial.items() if l is not None]
                     self.cache.put_many(partial)
                     self.stats["ok"] += len(partial)
-                    self.stopped = f"{e.category}: {e}"
+                    if isinstance(e, KeyboardInterrupt):
+                        self.interrupted = True
+                        self.stopped = "INTERRUPTED (Ctrl+C)"
+                    else:
+                        self.stopped = f"{e.category}: {e}"
                     break
                 self.cache.put_many([(r["id"], r["label"], r["status"]) for r in res])
                 self.stats["sent"] += len(batch)
@@ -611,8 +685,9 @@ class LLMComponent:
                 i += len(batch)
                 n_batches += 1
                 if progress_every and n_batches % progress_every == 0:
-                    log.info("%s: %d/%d new comments done (requests %d, today %d%s)", self.name, i, len(todo),
-                             self.stats["requests"], self.budget.today,
+                    log.info("%s: %d/%d new comments done (batch %d, requests %d, rate-limit waits %d, today %d%s)",
+                             self.name, i, len(todo), self.batch_size, self.stats["requests"],
+                             self.stats["rate_limit_waits"], self.budget.today,
                              f"/{self.budget.limit}" if self.budget.limit else "")
         except FatalProviderError as e:
             self.stopped = f"{e.category}: {e}"

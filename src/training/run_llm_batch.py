@@ -205,10 +205,14 @@ def main(argv=None):
                 exit_code = exit_code or 1
                 break
         errs = comp.stats["errors"]
-        log.info("%s: %d requests, %d retries, %d unusable replies%s", comp.name, comp.stats["requests"],
-                 comp.stats["retries"], comp.stats["parse_failures"],
+        log.info("%s: %d requests, %d rate-limit waits, %d retries, %d unusable replies%s", comp.name,
+                 comp.stats["requests"], comp.stats["rate_limit_waits"], comp.stats["retries"],
+                 comp.stats["parse_failures"],
                  "; problems: " + ", ".join(f"{k} x{v}" for k, v in errs.items()) if errs else "; no problems")
         rep.add("LLM usage", f"{comp.name} stats: {comp.stats}" + (f" — stopped: {comp.stopped}" if comp.stopped else ""))
+        if comp.interrupted:
+            exit_code = 130
+            break
         if errs:
             rep.add("LLM usage", f"**{comp.name} problems** (category: count)\n\n" +
                     md_table([{"category": k, "count": v} for k, v in errs.items()]))

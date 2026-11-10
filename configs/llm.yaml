@@ -23,10 +23,13 @@ json_mode: false            # response_format=json_object cannot return a top-le
 extra_body: {}              # merged into every request body of both LLMs; per LLM use LLM_A_EXTRA_BODY / LLM_B_EXTRA_BODY in .env
 
 # Output token limit per request = max_tokens_per_comment * comments + max_tokens_extra (capped). If a reply is cut off
-# (finish_reason "length", typical for reasoning models such as gpt-oss) the limit doubles for the rest of the run.
+# (finish_reason "length", typical for reasoning models such as gpt-oss) a reasoning allowance is added (256, then doubled)
+# for the rest of the run. Groq counts prompt + max_tokens against its tokens-per-minute limit, so keep these small.
 max_tokens_per_comment: 20
 max_tokens_extra: 50
 max_tokens_cap: 8192
+reasoning_tokens: 0         # starting reasoning allowance; e.g. 256 for gpt-oss with reasoning_effort low
+max_rate_limit_waits: 30    # per request: 429 per-minute waits before the run stops (rejected requests are not counted)
 
 pilot:
   n_comments: 100
