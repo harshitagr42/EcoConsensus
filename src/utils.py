@@ -105,6 +105,9 @@ def write_json(p: Path, obj, overwrite: bool = True) -> Path:
 
 
 # ---------------------------------------------------------------- logging
+LIBRARY_LOGGERS = ("llm_api",)
+
+
 def get_logger(run_type: str, component: str | None = None, log_dir: Path | None = None) -> logging.Logger:
     """Console + `outputs/<component>/logs/<run_type>_<YYYYMMDD_HHMMSS>.txt` (component defaults to run_type).
     The command line is logged first."""
@@ -124,6 +127,11 @@ def get_logger(run_type: str, component: str | None = None, log_dir: Path | None
     fh = logging.FileHandler(log_file, encoding="utf-8")
     fh.setFormatter(fmt)
     logger.addHandler(fh)
+    for name in LIBRARY_LOGGERS:          # module loggers (e.g. llm_api retries and stop reasons) go to the same places
+        lib = logging.getLogger(name)
+        lib.handlers = [sh, fh]
+        lib.setLevel(logging.INFO)
+        lib.propagate = False
     logger.info("command: %s", " ".join(sys.argv))
     logger.info("log file: %s", log_file)
     return logger

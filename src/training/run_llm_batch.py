@@ -26,7 +26,7 @@ if __package__ in (None, ""):  # started as a file (python src/training/run_llm_
 
 from src.config import CFG, FIXED_CLAIM, LABELS, out_path
 from src.data_loading import load_split
-from src.llm_api import (STATUS_MISSING, STATUS_OK, FatalProviderError, LLMComponent, StopRun, cache_key,
+from src.llm_api import (STATUS_MISSING, STATUS_OK, FatalProviderError, LLMComponent, LLMError, StopRun, cache_key,
                          default_batch_size)
 from src.metrics import compute_metrics
 from src.reporting import Report, md_table
@@ -149,7 +149,7 @@ def main(argv=None):
         try:
             comp = LLMComponent(slot, batch_size=bs, max_requests=args.max_requests)
         except FatalProviderError as e:
-            log.error("%s", e)
+            log.error("llm_%s not started. %s: %s", slot, e.category, e)
             exit_code = 4
             continue
         log.info("%s: %r  prompt %s  batch %d  cache %s", comp.name, comp.cfg, comp.prompt.version, comp.batch_size,
@@ -158,8 +158,8 @@ def main(argv=None):
         if args.check:
             try:
                 res = comp.classify_batch([(f"check{i}", c) for i, c in enumerate(CHECK_COMMENTS)])
-            except StopRun as e:
-                log.error("%s: %s", comp.name, e)
+            except LLMError as e:
+                log.error("%s check FAILED.\n    %s\n    %s", comp.name, e.category, e)
                 exit_code = 5
                 continue
             for c, r in zip(CHECK_COMMENTS, res):
@@ -204,7 +204,14 @@ def main(argv=None):
             if comp.stopped:
                 exit_code = exit_code or 1
                 break
+        errs = comp.stats["errors"]
+        log.info("%s: %d requests, %d retries, %d unusable replies%s", comp.name, comp.stats["requests"],
+                 comp.stats["retries"], comp.stats["parse_failures"],
+                 "; problems: " + ", ".join(f"{k} x{v}" for k, v in errs.items()) if errs else "; no problems")
         rep.add("LLM usage", f"{comp.name} stats: {comp.stats}" + (f" — stopped: {comp.stopped}" if comp.stopped else ""))
+        if errs:
+            rep.add("LLM usage", f"**{comp.name} problems** (category: count)\n\n" +
+                    md_table([{"category": k, "count": v} for k, v in errs.items()]))
 
     if rep.sections and not (args.estimate or args.check):
         rp = rep.save(out_path("llm", "reports", create=True) / ("llm_pilot.md" if args.pilot else "llm_batch.md"))

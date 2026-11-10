@@ -20,7 +20,13 @@ max_retries: 5              # per request, for transient errors (429 per-minute,
 backoff_base_sec: 2
 backoff_cap_sec: 90
 json_mode: false            # response_format=json_object cannot return a top-level array; keep off
-extra_body: {}              # merged into every request body (e.g. {"reasoning_effort": "none"} for some providers)
+extra_body: {}              # merged into every request body of both LLMs; per LLM use LLM_A_EXTRA_BODY / LLM_B_EXTRA_BODY in .env
+
+# Output token limit per request = max_tokens_per_comment * comments + max_tokens_extra (capped). If a reply is cut off
+# (finish_reason "length", typical for reasoning models such as gpt-oss) the limit doubles for the rest of the run.
+max_tokens_per_comment: 20
+max_tokens_extra: 50
+max_tokens_cap: 8192
 
 pilot:
   n_comments: 100

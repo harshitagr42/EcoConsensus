@@ -113,3 +113,96 @@ def test_token_limit_shrinks_batch(tmp_path):
     res = c.run([f"serious {i}" for i in range(8)])
     assert all(r["status"] == "ok" for r in res)
     assert c.batch_size <= 4 and c.stats["token_backoffs"] >= 1
+
+
+# ---------------------------------------------------------------- error categories and empty-reply diagnosis
+class FakeResponse:
+    def __init__(self, status, body, headers=None):
+        self.status_code, self._body, self.headers = status, body, headers or {}
+        self.text = json.dumps(body)
+
+    def json(self):
+        return self._body
+
+
+class FakeSession:
+    def __init__(self, *responses):
+        self.responses, self.bodies = list(responses), []
+
+    def post(self, url, json=None, **kw):
+        self.bodies.append(json)
+        return self.responses.pop(0)
+
+
+def http_client(*responses):
+    from src.llm_api import OpenAICompatibleClient, ProviderConfig
+    cfg = ProviderConfig("b", "groq", "m", "k", "https://x/v1", None, {"reasoning_effort": "low"})
+    return OpenAICompatibleClient(cfg, session=FakeSession(*responses))
+
+
+@pytest.mark.parametrize("status,message,error,category", [
+    (401, "Invalid API Key", "FatalProviderError", "AUTH ERROR"),
+    (404, "model not found", "FatalProviderError", "NOT FOUND"),
+    (429, "Rate limit reached on tokens per minute (TPM): Limit 8000", "TokenLimitError", "RATE LIMIT (tokens"),
+    (429, "Rate limit reached on requests per minute (RPM)", "TransientError", "RATE LIMIT (requests"),
+    (429, "Rate limit reached on requests per day (RPD)", "DailyLimitReached", "DAILY QUOTA"),
+    (503, "overloaded", "TransientError", "PROVIDER ERROR"),
+    (400, "unknown parameter reasoning_effort", "FatalProviderError", "BAD REQUEST"),
+])
+def test_http_errors_are_categorised(status, message, error, category):
+    c = http_client(FakeResponse(status, {"error": {"message": message, "type": "x"}}))
+    with pytest.raises(Exception) as ei:
+        c.chat("s", "u", 10)
+    assert type(ei.value).__name__ == error
+    assert ei.value.category.startswith(category) and message in str(ei.value)
+
+
+def test_extra_body_is_sent_and_reply_details_kept():
+    ok = {"choices": [{"message": {"content": "hi", "reasoning": "abc"}, "finish_reason": "stop"}],
+          "usage": {"completion_tokens": 5}}
+    c = http_client(FakeResponse(200, ok))
+    assert c.chat("s", "u", 10) == "hi"
+    assert c.session.bodies[0]["reasoning_effort"] == "low"
+    assert c.last_info["finish_reason"] == "stop" and c.last_info["reasoning_chars"] == 3
+
+
+def test_explain_unusable():
+    from src.llm_api import explain_unusable
+    cut = explain_unusable("", {"finish_reason": "length", "max_tokens": 110,
+                                "usage": {"completion_tokens": 110, "completion_tokens_details": {"reasoning_tokens": 108}}},
+                           3, "LLM_B")
+    assert cut.startswith("OUTPUT CUT OFF") and "108 of them reasoning" in cut and "LLM_B_EXTRA_BODY" in cut
+    assert explain_unusable("", {"finish_reason": "content_filter"}, 3, "LLM_B").startswith("BLOCKED")
+    assert explain_unusable("", {"finish_reason": "stop"}, 3, "LLM_B").startswith("EMPTY REPLY")
+    assert explain_unusable("I think...", {"finish_reason": "stop"}, 3, "LLM_B").startswith("UNPARSEABLE")
+
+
+class Thinker(Stub):
+    """Reasoning model: the reply is cut off until max_tokens is large enough."""
+
+    def __init__(self, need):
+        super().__init__()
+        self.need, self.limits = need, []
+
+    def chat(self, system, user, max_tokens):
+        self.limits.append(max_tokens)
+        if max_tokens < self.need:
+            self.last_info = {"finish_reason": "length", "usage": {"completion_tokens": max_tokens}}
+            return ""
+        self.last_info = {"finish_reason": "stop"}
+        return super().chat(system, user, max_tokens)
+
+
+def test_cut_off_replies_raise_max_tokens(tmp_path):
+    t = Thinker(need=400)
+    c = comp(tmp_path, t, bs=4)
+    res = c.run(["a hoax", "serious", "x", "y"])
+    assert all(r["status"] == "ok" for r in res)
+    assert t.limits[0] < 400 <= t.limits[-1] and c.stats["parse_failures"] == 0
+    assert "OUTPUT CUT OFF (max_tokens raised)" in c.stats["errors"]
+
+
+def test_stop_reason_names_the_cause(tmp_path):
+    c = comp(tmp_path, Stub(junk=True), bs=2)
+    c.run(["a", "b", "c", "d", "e", "f", "g", "h"])
+    assert c.stopped and c.stopped.startswith("UNPARSEABLE REPLY") and "sorry" in c.stopped

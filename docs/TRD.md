@@ -265,11 +265,13 @@ LLM_A_MODEL=
 LLM_A_API_KEY=
 LLM_A_BASE_URL=           # optional, for OpenAI-compatible endpoints
 LLM_A_DAILY_LIMIT=        # requests per day, used by the budget guard
+LLM_A_EXTRA_BODY=         # optional JSON added to every request, e.g. {"reasoning_effort": "low"} for reasoning models
 LLM_B_PROVIDER=
 LLM_B_MODEL=
 LLM_B_API_KEY=
 LLM_B_BASE_URL=
 LLM_B_DAILY_LIMIT=
+LLM_B_EXTRA_BODY=
 LLM_BATCH_SIZE=50         # comments per request in training runs and test.py
 HF_TOKEN=                 # optional, for Hugging Face downloads
 ```
@@ -282,6 +284,8 @@ HF_TOKEN=                 # optional, for Hugging Face downloads
 - **Retries:** exponential backoff with a cap, honouring `Retry-After` when present.
 - **Budget guard:** counts requests per provider per day from a small usage file. When `LLM_x_DAILY_LIMIT` is reached the script stops cleanly, prints how many comments are still missing, and resumes from cache next time.
 - **Token limits:** Hindi and Bengali use many more tokens per word than English, so a 50-comment batch can be several thousand input tokens. If a provider returns a token-per-minute error, the script lowers the batch size automatically for that provider and waits.
+- **Output length:** `max_tokens` = `max_tokens_per_comment` × comments + `max_tokens_extra` (`configs/llm.yaml`, capped by `max_tokens_cap`). If a reply is cut off (`finish_reason: length`, typical for reasoning models such as `openai/gpt-oss-20b`, which spend the budget on reasoning) the limit doubles for the rest of the run and the request is resent. `LLM_x_EXTRA_BODY={"reasoning_effort": "low"}` avoids most of that.
+- **Error reporting:** every failure is logged with a category that says what happened and on whose side: `AUTH ERROR` / `NOT FOUND` / `BAD REQUEST` / `CONFIG ERROR` (your side: key, model, URL, parameters), `RATE LIMIT (requests per minute)` / `RATE LIMIT (tokens per minute)` / `REQUEST TOO LARGE` (waits, retries, shrinks the batch), `DAILY QUOTA USED UP` (provider) or `DAILY BUDGET USED UP` (your `DAILY_LIMIT`), `PROVIDER ERROR` / `TIMEOUT` / `NETWORK ERROR`, and for HTTP 200 replies without an answer `OUTPUT CUT OFF`, `EMPTY REPLY`, `BLOCKED BY THE PROVIDER'S SAFETY FILTER`, `UNPARSEABLE REPLY` (with the provider's message, `finish_reason`, token usage and remaining-quota headers). A stopped run logs the reason and how many comments are left; the counts per category are in the log and the `llm_batch` report.
 - **Few-shot examples** (if few-shot wins on `val`) come from `train_base` only.
 
 ## 11. Ensembling summary
