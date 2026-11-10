@@ -105,10 +105,11 @@ def write_json(p: Path, obj, overwrite: bool = True) -> Path:
 
 
 # ---------------------------------------------------------------- logging
-def get_logger(run_type: str, log_dir: Path | None = None) -> logging.Logger:
-    """Console + `outputs/logs/<run_type>_<YYYYMMDD_HHMMSS>.txt`. The command line is logged first."""
-    from src.config import path
-    log_dir = Path(log_dir) if log_dir else path("logs", create=True)
+def get_logger(run_type: str, component: str | None = None, log_dir: Path | None = None) -> logging.Logger:
+    """Console + `outputs/<component>/logs/<run_type>_<YYYYMMDD_HHMMSS>.txt` (component defaults to run_type).
+    The command line is logged first."""
+    from src.config import out_path
+    log_dir = Path(log_dir) if log_dir else out_path(component or run_type, "logs", create=True)
     log_dir.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger(run_type)
     if logger.handlers:
@@ -140,19 +141,20 @@ def env_info() -> dict:
 
 
 # ---------------------------------------------------------------- MLflow (optional everywhere)
-def mlflow_start(experiment: str, run_name: str, logger: logging.Logger | None = None):
-    """Return an active mlflow run, or None if mlflow is missing/broken (never stops a script)."""
+def mlflow_start(component: str, experiment: str, run_name: str, logger: logging.Logger | None = None):
+    """Return an active mlflow run in `outputs/<component>/metrics/mlflow.db`, or None if mlflow is missing/broken
+    (never stops a script)."""
     os.environ.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")
     try:
         import mlflow
-        from src.config import BASE, ROOT, path
-        path("metrics", create=True)
-        uri = BASE["mlflow"]["tracking_uri"]
+        from src.config import BASE, ROOT, out_path
+        metrics_dir = out_path(component, "metrics", create=True)
+        uri = BASE["mlflow"]["tracking_uri"].format(component=component)
         if uri.startswith("sqlite:///") and not uri.startswith("sqlite:////"):
             uri = f"sqlite:///{ROOT / uri[len('sqlite:///'):]}"
         mlflow.set_tracking_uri(uri)
         if mlflow.get_experiment_by_name(experiment) is None:
-            mlflow.create_experiment(experiment, artifact_location=(path("metrics") / "mlartifacts").as_uri())
+            mlflow.create_experiment(experiment, artifact_location=(metrics_dir / "mlartifacts").as_uri())
         mlflow.set_experiment(experiment)
         return mlflow.start_run(run_name=run_name)
     except Exception as e:  # noqa: BLE001

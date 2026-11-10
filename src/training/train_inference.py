@@ -4,9 +4,9 @@ table per split. Runs on the Mac; sends no LLM requests and needs no GPU.
     python -m src.training.train_inference                                   # meta, val, semeval_test; all 4
     python -m src.training.train_inference --splits meta --components muril indicbert llm_a
 
-Inputs  outputs/predictions/probs_<muril|indicbert>_<split>.csv   (unzip <model>_results.zip in the project root)
-        outputs/cache/<provider>__<model>__<prompt_version>.jsonl  (filled by run_llm_batch.py)
-Output  outputs/predictions/features_<split>.csv  (12 features + <component>_available + ids/labels for reports)
+Inputs  outputs/<muril|indicbert>/predictions/probs_<model>_<split>.csv   (unzip <model>_results.zip in the project root)
+        outputs/llm/cache/<provider>__<model>__<prompt_version>.jsonl  (filled by run_llm_batch.py)
+Output  outputs/ensemble/predictions/features_<split>.csv  (12 features + <component>_available + ids/labels for reports)
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-from src.config import CFG, ROOT, path
+from src.config import CFG, ROOT, out_path, path
 from src.data_loading import load_split
 from src.ensembling import COMPONENTS, LLMS, TRANSFORMERS, add_llm, add_transformer, available
 from src.llm_api import FatalProviderError, LLMComponent
@@ -35,7 +35,7 @@ def local_data_hash() -> str:
 
 
 def transformer_probs(comp: str, split: str, base: pd.DataFrame, log) -> np.ndarray | None:
-    p = path("predictions") / f"probs_{comp}_{split}.csv"
+    p = out_path(comp, "predictions") / f"probs_{comp}_{split}.csv"
     if not p.exists():
         log.warning("%s: %s missing (download %s_results.zip from Drive and unzip it in the project root)",
                     comp, p.relative_to(ROOT), comp)
@@ -60,7 +60,7 @@ def main(argv=None):
     ap.add_argument("--splits", nargs="+", default=["meta", "val", "semeval_test"])
     ap.add_argument("--components", nargs="+", default=COMPONENTS, choices=COMPONENTS)
     args = ap.parse_args(argv)
-    log = get_logger("train_inference")
+    log = get_logger("train_inference", "ensemble")
 
     data_hash = local_data_hash()
     for comp in [c for c in args.components if c in TRANSFORMERS]:
@@ -84,8 +84,7 @@ def main(argv=None):
         except FatalProviderError as e:
             log.warning("%s left out: %s", comp, e)
 
-    out_dir = path("predictions", create=True)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = out_path("ensemble", "predictions", create=True)
     for split in args.splits:
         base = load_split(split)
         table = base[KEEP].copy()

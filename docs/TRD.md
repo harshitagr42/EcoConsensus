@@ -289,8 +289,8 @@ Behaviour in short (details in `INFERENCE.md`): one comment by default, or a fil
 
 ## 15. Experiment tracking (MLflow)
 
-- Store: SQLite at `outputs/metrics/mlflow.db` (the experiment used `experiment_outputs/mlflow.db`). Copy it from Colab or Drive and open it with `mlflow ui --backend-store-uri sqlite:///outputs/metrics/mlflow.db`.
-- Experiments: `finetune_method_comparison` (done), `finetune_final`, `llm_prompts`, `stacking`, `final_test`.
+- Store: one SQLite file per component at `outputs/<component>/metrics/mlflow.db` (the experiment used `experiment_outputs/mlflow.db`); the Colab runs arrive as `outputs/<model>/metrics/mlflow.db` inside `<model>_results.zip`. Open one with `mlflow ui --backend-store-uri sqlite:///outputs/<component>/metrics/mlflow.db`.
+- Experiments: `finetune_method_comparison` (done), `finetune_final`, `baselines`, `llm_prompts`, `stacking`, `evaluation`, `final_test`.
 - Per run: parameters, per-epoch metrics, final metrics, trainable parameters, training time, library versions, `run_info.json`.
 - Run naming: `<component>__<method>__seed<k>__<hash>`.
 - Model selection uses `val` metrics. Test metrics are only logged in `final_test`.
@@ -301,7 +301,7 @@ Macro-F1 (primary, labels fixed to the 3 classes so a missing class scores 0), a
 
 ## 17. Logging
 
-One `.txt` file per run in `outputs/logs/`: `<run_type>_<YYYYMMDD_HHMMSS>.txt`. Contents: timestamp, command line, config summary and versions, input pointer and row counts, preprocessing summary, per-comment outputs (when small), warnings (parse errors, API failures, dropped rows, fallbacks), metrics. Python `logging` with a file handler and console output. Keys are never logged.
+One `.txt` file per run in `outputs/<component>/logs/`: `<run_type>_<YYYYMMDD_HHMMSS>.txt`. Contents: timestamp, command line, config summary and versions, input pointer and row counts, preprocessing summary, per-comment outputs (when small), warnings (parse errors, API failures, dropped rows, fallbacks), metrics. Python `logging` with a file handler and console output. Keys are never logged.
 
 ## 18. Testing
 
@@ -320,7 +320,7 @@ On the Mac, small and fast (`tests/`):
 
 - **Comments:** a short header per file saying what it is for, and comments only where the reason is not obvious. No line-by-line narration.
 - Seeds for Python, NumPy and PyTorch are set in one `set_seed()`; library versions are recorded in every run.
-- Keys only in `.env` (or Colab and Kaggle secrets). `.gitignore` covers `.env`, `outputs/cache/`, `outputs/logs/`, `mlruns/`, `mlflow.db`, large weights and `test/*` data files (not the result files' folder structure).
+- Keys only in `.env` (or Colab and Kaggle secrets). `.gitignore` covers `.env`, `outputs/` (cache, logs, predictions, MLflow), `mlruns/`, `mlflow.db`, large weights and `test/*` data files (not the result files' folder structure).
 - LoRA adapters (about 5 MB each) may be committed; full base-model weights never are.
 - `joblib` files (TF-IDF, meta-models) are scikit-learn pickles. Only load files you created yourself.
 
@@ -355,3 +355,5 @@ On the Mac, small and fast (`tests/`):
 | 25 | LLM prompt `v3` in `prompts/stance_system_prompt.md`, built from `LLM_PROMPT.md` (labels FAVOUR / AGAINST / NONE → 0 / 2 / 1); the code reads the prompt from that file | `v2` file was dropped; one source of truth for the code |
 | 26 | Both LLM components use one OpenAI-compatible adapter; provider, model and URL only in `.env` | User decision; covers most free-tier providers |
 | 27 | LLM cache fill and meta-model training run on the Mac (Colab only if memory runs out) | Meta-model is a small logistic regression |
+| 28 | Outputs are grouped by component: `outputs/<component>/{logs,metrics,predictions,reports}/` for `prepare_data`, `baselines`, `muril`, `indicbert`, `llm`, `ensemble`, `evaluate`, `inference`, `test`; one MLflow DB per component; LLM cache in `outputs/llm/cache/`. The notebooks' results zip uses the same layout | User decision (2026-11-11): each model's files in one place |
+| 29 | `src/evaluate.py` scores every available system (baselines, transformers, LLMs from cache, soft/majority vote, stacked) on `val`, `meta`, `semeval_test` and writes a report; `stacked` is not scored on `meta` (in-sample). No requests, no tuning | User request: one command for the metrics of every model |

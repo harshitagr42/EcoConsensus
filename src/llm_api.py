@@ -6,7 +6,7 @@ Configuration: .env (LLM_A_*, LLM_B_*, LLM_BATCH_SIZE) + configs/llm.yaml + prom
     comp = LLMComponent("a")
     results = comp.run(comments)          # list of {"label": 0/1/2 or None, "status": ..., "cached": bool}
 
-Cache: outputs/cache/<provider>__<model>__<prompt_version>.jsonl, one JSON record per comment, keyed by
+Cache: outputs/llm/cache/<provider>__<model>__<prompt_version>.jsonl, one JSON record per comment, keyed by
 SHA-256 of the preprocessed claim + comment. The batch size is not part of the key.
 """
 from __future__ import annotations
@@ -245,7 +245,7 @@ class LLMCache:
 
 
 class BudgetGuard:
-    """Counts requests per provider/model per (local) day in outputs/cache/usage__<provider>__<model>.json."""
+    """Counts requests per provider/model per (local) day in outputs/llm/cache/usage__<provider>__<model>.json."""
 
     def __init__(self, provider: str, model: str, daily_limit: int | None, cache_dir: Path | None = None):
         d = Path(cache_dir) if cache_dir else path("cache", create=True)

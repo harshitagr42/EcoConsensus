@@ -99,7 +99,7 @@ flowchart TD
 
 ### A7. Build features and the meta-model
 - **What happens:** `train_inference.py` runs both transformers on `meta`, `val` and `semeval_test` and joins the cached LLM labels. `train_meta.py` fits the meta-model and the three fallback variants on `meta`, and compares with voting.
-- **Out:** feature tables in `outputs/predictions/`, models in `models/finetuned/meta/`.
+- **Out:** feature tables in `outputs/ensemble/predictions/`, models in `models/finetuned/meta/`.
 
 ## 4. Path B: `inference.py`
 
@@ -133,7 +133,7 @@ Claim   : Climate change and global warming is a serious concern.
 Final   : Favour | None | Against
 Votes   : MuRIL=…  IndicBERT=…  LLM-A=…  LLM-B=…
 Mode    : meta_all4   (or: meta_no_llm_b — LLM-B unavailable)
-Log     : outputs/logs/inference_<timestamp>.txt
+Log     : outputs/inference/logs/inference_<timestamp>.txt
 ```
 
 | Situation | What happens |
@@ -182,10 +182,10 @@ flowchart TD
 | `test/result.txt` | The full report (latest) | Previous file moved to `test/archive/result_<time>.txt` first |
 | `test/reports/result_<time>.md` | The same report in Markdown | Timestamped, never reused |
 | `test/predictions.csv` | `ID`, `Predicted_Label` (the PS prediction file) | Previous file moved to `test/archive/` first |
-| `outputs/logs/test_<time>.txt` | Run log | Timestamped |
-| `outputs/predictions/test_<time>_detailed.csv` | Every component's output per comment | Timestamped |
-| `outputs/metrics/test_<time>.json` | Numbers behind the report | Timestamped |
-| `outputs/cache/` | LLM answers per comment | Appended only |
+| `outputs/test/logs/test_<time>.txt` | Run log | Timestamped |
+| `outputs/test/predictions/test_<time>_detailed.csv` | Every component's output per comment | Timestamped |
+| `outputs/test/metrics/test_<time>.json` | Numbers behind the report | Timestamped |
+| `outputs/llm/cache/` | LLM answers per comment | Appended only |
 
 | Situation | What happens |
 |---|---|
@@ -201,8 +201,8 @@ flowchart TD
 ## 6. Path D: Review
 
 1. Read `test/result.txt` (or the `.md` copy).
-2. Open MLflow: `mlflow ui --backend-store-uri sqlite:///outputs/metrics/mlflow.db`.
-3. Check `outputs/logs/` for any run's exact inputs and warnings.
+2. Open MLflow: `mlflow ui --backend-store-uri sqlite:///outputs/<component>/metrics/mlflow.db`.
+3. Check `outputs/<component>/logs/` for any run's exact inputs and warnings.
 4. Read the README for how to reproduce each step.
 
 ## 7. Dead ends avoided

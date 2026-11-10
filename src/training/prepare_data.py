@@ -31,7 +31,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from src.config import FIXED_CLAIM, L2I, LABELS, ROOT, SEED, BASE, path
+from src.config import BASE, FIXED_CLAIM, L2I, LABELS, ROOT, SEED, out_path, path
 from src.data_loading import read_table
 from src.preprocessing import is_empty, preprocess, script_group
 from src.splitting import (assign_groups, check_complete_groups, check_no_leakage, split_groups, split_report)
@@ -299,7 +299,7 @@ def main(argv=None):
             report += [f"## Dropped rows: {name}", "", "```", d.head(30).to_string(index=False), "```", ""]
         text = "\n".join(report)
         (out_dir / "split_report.md").write_text(text, encoding="utf-8")
-        rp = safe_write(path("reports", create=True) / "split_report.md", text)
+        rp = safe_write(out_path("prepare_data", "reports", create=True) / "split_report.md", text)
         log.info("split report: %s and %s", out_dir / "split_report.md", rp)
 
         manifest = dict(

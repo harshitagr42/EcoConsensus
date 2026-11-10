@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedGroupKFold
 
-from src.config import LABELS, ROOT, SEED, path
+from src.config import LABELS, ROOT, SEED, out_path, path
 from src.data_loading import load_split
 from src.ensembling import (COMPONENTS, LLMS, TRANSFORMERS, VARIANTS, available, component_pred, majority_vote,
                             make_meta_model, predict_with_fallback, rows_for_variant, soft_vote, variant_cols,
@@ -35,7 +35,7 @@ MIN_ROWS = 60
 
 
 def load_features(split: str) -> pd.DataFrame:
-    p = path("predictions") / f"features_{split}.csv"
+    p = out_path("ensemble", "predictions") / f"features_{split}.csv"
     if not p.exists():
         raise FileNotFoundError(f"{p} missing. Run: python -m src.training.train_inference --splits {split}")
     return pd.read_csv(p, dtype={"id": str, "source_id": str, "group_id": str})
@@ -110,7 +110,7 @@ def main(argv=None):
     ap.add_argument("--seed", type=int, default=SEED)
     ap.add_argument("--variants", nargs="+", default=list(VARIANTS), choices=list(VARIANTS))
     args = ap.parse_args(argv)
-    log = get_logger("train_meta")
+    log = get_logger("train_meta", "ensemble")
     set_seed(args.seed)
 
     meta = load_features("meta")
@@ -236,10 +236,10 @@ def main(argv=None):
         for i in info[v]["weight_issues"]:
             rep.warn(f"{v}: {i}")
     rep.add("Environment", md_table([env_info()]))
-    rp = rep.save(path("reports", create=True) / "meta_report.md")
+    rp = rep.save(out_path("ensemble", "reports", create=True) / "meta_report.md")
     log.info("report: %s", rp)
 
-    run = mlflow_start("stacking", f"meta__{len(fitted)}variants", log)
+    run = mlflow_start("ensemble", "stacking", f"meta__{len(fitted)}variants", log)
     if run:
         import mlflow
         with run:

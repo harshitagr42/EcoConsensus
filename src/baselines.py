@@ -2,8 +2,8 @@
 
     python -m src.baselines              # train on train_base, pick C on val, score val and semeval_test
 
-Saves models/finetuned/baselines/{majority.json, tfidf_lr.joblib}, per-split predictions in outputs/predictions/,
-a timestamped report in outputs/reports/ and an MLflow run (experiment `baselines`).
+Saves models/finetuned/baselines/{majority.json, tfidf_lr.joblib}, per-split predictions in outputs/baselines/predictions/,
+a timestamped report in outputs/baselines/reports/ and an MLflow run (outputs/baselines/metrics/mlflow.db).
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import FeatureUnion, Pipeline
 
-from src.config import LABELS, SEED, path
+from src.config import LABELS, SEED, out_path, path
 from src.data_loading import load_split
 from src.metrics import bootstrap_macro_f1, compute_metrics, confusion_md
 from src.reporting import Report, md_table
@@ -82,8 +82,7 @@ def main(argv=None):
     evals = {s: load_split(s) for s in args.eval_splits}
     out_dir = path("baselines", create=True)
     out_dir.mkdir(parents=True, exist_ok=True)
-    pred_dir = path("predictions", create=True)
-    pred_dir.mkdir(parents=True, exist_ok=True)
+    pred_dir = out_path("baselines", "predictions", create=True)
 
     # majority
     maj_label = int(train["label"].value_counts().idxmax())
@@ -136,10 +135,10 @@ def main(argv=None):
         rep.add("Results by script group", f"**{name} / {split}**\n\n" + md_table(
             [{"group": k, **v} for k, v in m["by_script_group"].items()]))
     rep.add("Environment", md_table([env_info()]))
-    rp = rep.save(path("reports", create=True) / "baselines_report.md")
+    rp = rep.save(out_path("baselines", "reports", create=True) / "baselines_report.md")
     log.info("report: %s", rp)
 
-    run = mlflow_start("baselines", "baselines__tfidf_lr", log)
+    run = mlflow_start("baselines", "baselines", "baselines__tfidf_lr", log)
     if run:
         import mlflow
         with run:

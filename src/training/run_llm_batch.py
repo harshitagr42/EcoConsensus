@@ -19,7 +19,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-from src.config import CFG, FIXED_CLAIM, LABELS, path
+from src.config import CFG, FIXED_CLAIM, LABELS, out_path
 from src.data_loading import load_split
 from src.llm_api import (STATUS_MISSING, STATUS_OK, FatalProviderError, LLMComponent, StopRun, cache_key,
                          default_batch_size)
@@ -128,7 +128,7 @@ def main(argv=None):
     ap.add_argument("--pilot", action="store_true", help="batch-size pilot on val (spends ~20 requests)")
     ap.add_argument("--score", action="store_true", help="only print metrics from the cache (no requests)")
     args = ap.parse_args(argv)
-    log = get_logger("run_llm_batch")
+    log = get_logger("run_llm_batch", "llm")
     bs = args.batch_size or default_batch_size()
 
     if "semeval_test" in args.split and not (args.estimate or args.score) and not LLM_CFG.get("prompt_frozen"):
@@ -188,7 +188,7 @@ def main(argv=None):
                          m["macro_f1"], m["n"], m["accuracy"], m["per_class"]["against"]["f1"])
             rep.add("LLM usage", md_table([row]))
             if split == "val" and m:                                # prompt comparison is tracked in MLflow
-                run = mlflow_start("llm_prompts", f"{comp.name}__{comp.prompt.version}__val", log)
+                run = mlflow_start("llm", "llm_prompts", f"{comp.name}__{comp.prompt.version}__val", log)
                 if run:
                     import mlflow
                     with run:
@@ -202,7 +202,7 @@ def main(argv=None):
         rep.add("LLM usage", f"{comp.name} stats: {comp.stats}" + (f" — stopped: {comp.stopped}" if comp.stopped else ""))
 
     if rep.sections and not (args.estimate or args.check):
-        rp = rep.save(path("reports", create=True) / ("llm_pilot.md" if args.pilot else "llm_batch.md"))
+        rp = rep.save(out_path("llm", "reports", create=True) / ("llm_pilot.md" if args.pilot else "llm_batch.md"))
         log.info("report: %s", rp)
     return exit_code
 

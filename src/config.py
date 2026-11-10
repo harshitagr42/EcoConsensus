@@ -2,6 +2,7 @@
 
     from src.config import CFG, ROOT, path
     path("processed")            # -> <root>/data/processed
+    out_path("muril", "predictions")   # -> <root>/outputs/muril/predictions
 """
 from __future__ import annotations
 
@@ -52,6 +53,24 @@ def path(key: str, create: bool = False) -> Path:
     p = ROOT / BASE["paths"][key]
     if create:
         (p if not p.suffix else p.parent).mkdir(parents=True, exist_ok=True)
+    return p
+
+
+OUTPUT_COMPONENTS: list[str] = list(BASE["outputs"]["components"])
+OUTPUT_KINDS: list[str] = list(BASE["outputs"]["kinds"])
+
+
+def out_path(component: str, kind: str | None = None, create: bool = False) -> Path:
+    """`outputs/<component>/<kind>`: every script keeps its logs, metrics, predictions and reports in its own folder."""
+    if component not in OUTPUT_COMPONENTS:
+        raise KeyError(f"unknown output component {component!r}; add it to base.yaml outputs.components")
+    if kind is not None and kind not in OUTPUT_KINDS:
+        raise KeyError(f"unknown output kind {kind!r}; one of {OUTPUT_KINDS}")
+    p = ROOT / BASE["paths"]["outputs"] / component
+    if kind:
+        p = p / kind
+    if create:
+        p.mkdir(parents=True, exist_ok=True)
     return p
 
 

@@ -188,7 +188,7 @@ Each feature lists who it is for, what it does, and what counts as done.
   - It still produces predictions and a prediction-only report when the file has no labels.
 
 ### F14. Logging and outputs
-- **Done when:** every run writes a timestamped `.txt` log in `outputs/logs/` with the command, input pointer, preprocessing summary, config, per-component outputs, fallbacks and warnings.
+- **Done when:** every run writes a timestamped `.txt` log in `outputs/<component>/logs/` with the command, input pointer, preprocessing summary, config, per-component outputs, fallbacks and warnings.
 
 ### F15. Model storage layout
 - **Done when:** `models/original/` holds pointers to the untouched base models, and `models/finetuned/` holds one folder per trained component (LoRA adapters, TF-IDF model, meta-models) with a `run_info.json` (base model, method, config, split id, metrics, MLflow run id). LoRA adapters are small enough for Git (roughly 5 MB each).

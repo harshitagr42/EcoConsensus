@@ -153,7 +153,7 @@ Claim   : Climate change and global warming is a serious concern.
 Final   : Against
 Votes   : MuRIL=Against  IndicBERT=Against  LLM-A=Against  LLM-B=None
 Mode    : meta_all4
-Log     : outputs/logs/inference_20261112_101500.txt
+Log     : outputs/inference/logs/inference_20261112_101500.txt
 ```
 
 (The values above are an example of the layout, not a real result.)
@@ -164,8 +164,8 @@ A file prints a short summary (rows read, rows skipped, label counts), the path 
 
 | File | Content |
 |---|---|
-| `outputs/logs/inference_<time>.txt` | Command, input pointer, preprocessing summary, config, each component's output, fallbacks, warnings |
-| `outputs/predictions/inference_<time>.csv` | `ID`, `Predicted_Label`, plus each component's vote |
+| `outputs/inference/logs/inference_<time>.txt` | Command, input pointer, preprocessing summary, config, each component's output, fallbacks, warnings |
+| `outputs/inference/predictions/inference_<time>.csv` | `ID`, `Predicted_Label`, plus each component's vote |
 
 Files are timestamped and never overwritten.
 

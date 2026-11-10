@@ -78,8 +78,8 @@ Rules that protect the results:
 | S0 | `splitting.py` | Mac | Create `train_base`, `meta`, `val`, `semeval_test`; write split report | `data/processed/` |
 | S1 | `train_transformer.py --model muril` | Colab | Train MuRIL with LoRA on `train_base`; early stopping on `val` | `models/finetuned/muril_lora/` |
 | S2 | `train_transformer.py --model indicbert` | Colab (new session) | Same for IndicBERT | `models/finetuned/indicbert_lora/` |
-| S3 | `run_llm_batch.py` (once per provider) | Anywhere | Prompt choice on `val`, then fill the cache for `meta` in batches. Resumes daily | `outputs/cache/` |
-| S4 | `train_inference.py --split meta` (also `val`, `semeval_test`) | Colab | Run both transformers on the split, join cached LLM answers, write the feature table | `outputs/predictions/features_<split>.csv` |
+| S3 | `run_llm_batch.py` (once per provider) | Anywhere | Prompt choice on `val`, then fill the cache for `meta` in batches. Resumes daily | `outputs/llm/cache/` |
+| S4 | `train_inference.py --split meta` (also `val`, `semeval_test`) | Colab | Run both transformers on the split, join cached LLM answers, write the feature table | `outputs/ensemble/predictions/features_<split>.csv` |
 | S5 | `train_meta.py` | Mac or Colab | Fit the meta-model with grouped cross-validation inside `meta` to pick `C`; fit the final model on all of `meta`; fit fallback variants; compare with voting | `models/finetuned/meta/` |
 | S6 | `test.py` | Mac | Run all components on the test file, apply the meta-model, write reports | `test/` and `outputs/` |
 

@@ -115,9 +115,9 @@ Setup is identical to `INFERENCE.md` (virtual environment, `pip install -r requi
 | `test/result.txt` | The full report (latest). The previous one is moved to `test/archive/` first |
 | `test/reports/result_<time>.md` | The same report as Markdown, timestamped |
 | `test/predictions.csv` | `ID,Predicted_Label` for every row (previous one archived) |
-| `outputs/logs/test_<time>.txt` | Exact command, configuration, per-step log, warnings |
-| `outputs/predictions/test_<time>_detailed.csv` | Every component's output per comment |
-| `outputs/metrics/test_<time>.json` | The numbers behind the report |
+| `outputs/test/logs/test_<time>.txt` | Exact command, configuration, per-step log, warnings |
+| `outputs/test/predictions/test_<time>_detailed.csv` | Every component's output per comment |
+| `outputs/test/metrics/test_<time>.json` | The numbers behind the report |
 
 Nothing is ever overwritten without being kept first. All reports are produced by the script; no AI writes them.
 

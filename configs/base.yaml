@@ -33,19 +33,31 @@ paths:
   baselines: models/finetuned/baselines
   meta_models: models/finetuned/meta
   outputs: outputs
-  logs: outputs/logs
-  metrics: outputs/metrics
-  predictions: outputs/predictions
-  reports: outputs/reports
-  cache: outputs/cache
+  cache: outputs/llm/cache               # LLM answer cache + daily usage counters
   prompts: prompts
+
+# Every script writes into its own folder: outputs/<component>/<kind>/
+# (e.g. outputs/muril/predictions/probs_muril_val.csv, outputs/baselines/reports/baselines_report_<ts>.md).
+outputs:
+  components:
+    prepare_data: data preparation (src/training/prepare_data.py)
+    baselines: majority + TF-IDF baselines (src/baselines.py)
+    muril: MuRIL LoRA (train_muril.ipynb on Colab; unzip muril_results.zip in the project root)
+    indicbert: IndicBERT v2 LoRA (train_indicbert.ipynb on Colab)
+    llm: LLM cache fills, pilots and prompt checks (src/training/run_llm_batch.py)
+    ensemble: feature tables and meta-model training (train_inference.py, train_meta.py)
+    evaluate: metrics and report for every model (src/evaluate.py)
+    inference: inference.py
+    test: test.py
+  kinds: [logs, metrics, predictions, reports]
 
 splits:
   meta_fraction: 0.15        # share of Pol-NLI train source rows held out for the meta-model
   names: [train_base, meta, val, semeval_test]
 
 mlflow:
-  tracking_uri: sqlite:///outputs/metrics/mlflow.db
+  # one MLflow store per component: mlflow ui --backend-store-uri sqlite:///outputs/<component>/metrics/mlflow.db
+  tracking_uri: sqlite:///outputs/{component}/metrics/mlflow.db
 
 preprocessing:
   noise_patterns: ['#SemST\b']   # regexes removed before anything else (case-insensitive)

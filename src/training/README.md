@@ -21,7 +21,8 @@ The splits are frozen: re-running `prepare_data` only re-zips them; `--overwrite
    Disconnected? Reconnect and Run all again: it resumes from the last finished epoch.
 3. When each finishes, download `MyDrive/EcoConsensus/outputs_<model>/<model>_results.zip` and unzip it in the project root:
    `unzip -o muril_results.zip -d .` (same for indicbert). This fills `models/finetuned/<model>_lora/` and
-   `outputs/predictions/probs_<model>_{meta,val,semeval_test}.csv`.
+   `outputs/<model>/` (`predictions/probs_<model>_{meta,val,semeval_test}.csv`, `metrics/mlflow.db`,
+   `metrics/<model>_metrics.json`, `logs/`). Then `python -m src.evaluate` scores both models.
 
 Meanwhile on the Mac (fill `.env` from `.env.example` first):
 
@@ -43,12 +44,35 @@ python -m src.training.run_llm_batch --provider b --split meta val
 python -m src.training.run_llm_batch --provider a --split semeval_test       # only after prompt_frozen: true
 python -m src.training.run_llm_batch --provider b --split semeval_test
 
-python -m src.training.train_inference      # -> outputs/predictions/features_{meta,val,semeval_test}.csv
+python -m src.training.train_inference      # -> outputs/ensemble/predictions/features_{meta,val,semeval_test}.csv
 python -m src.training.train_meta           # -> models/finetuned/meta/*.joblib + meta_info.json + report
 ```
 
 Useful flags: `--estimate` (requests needed, nothing sent), `--max-requests N`, `--retry-unavailable`,
 `--variants english/original hindi/pure_hindi bengali/pure_bengali` (quota cut-line), `--score` (metrics from cache only).
 
-Outputs: logs in `outputs/logs/`, timestamped reports in `outputs/reports/`, MLflow in `outputs/metrics/mlflow.db`
-(`mlflow ui --backend-store-uri sqlite:///outputs/metrics/mlflow.db`; the Colab runs are in `outputs/metrics/mlflow_colab_<model>.db`).
+## Evaluate (any time)
+
+```bash
+python -m src.evaluate                       # every model with outputs, on val, meta and semeval_test
+python -m src.evaluate --splits val meta     # leave the held-out test split out
+```
+
+Scores the baselines, both transformers, the LLMs (from the cache only), the soft vote, the majority vote and the stacked
+model (when `train_meta` has run). Writes a report, metrics JSON/CSV and per-row predictions to `outputs/evaluate/`.
+
+## Where outputs go
+
+Every script writes into its own folder `outputs/<component>/{logs,metrics,predictions,reports}/`:
+
+| component | written by |
+|---|---|
+| `prepare_data` | `src/training/prepare_data.py` (split report) |
+| `baselines` | `src/baselines.py` |
+| `muril`, `indicbert` | the Colab notebooks (unzip `<model>_results.zip` in the project root) |
+| `llm` | `run_llm_batch.py`; the LLM cache is `outputs/llm/cache/` |
+| `ensemble` | `train_inference.py` (feature tables) and `train_meta.py` (meta report) |
+| `evaluate` | `src/evaluate.py` |
+| `inference`, `test` | `inference.py`, `test.py` (Day 4) |
+
+Each component has its own MLflow store: `mlflow ui --backend-store-uri sqlite:///outputs/<component>/metrics/mlflow.db`.

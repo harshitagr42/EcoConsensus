@@ -13,8 +13,8 @@ from pathlib import Path
 from src.utils import safe_write, unique_path
 
 SECTION_ORDER = [
-    "Header", "Data summary", "System comparison", "Per-class results", "Confusion matrices",
-    "Results by script group", "LLM usage", "Fallback usage", "Error analysis", "Explainability",
+    "Header", "Data summary", "System comparison", "Training summary", "Per-class results", "Confusion matrices",
+    "Results by script group", "Results by language version", "LLM usage", "Fallback usage", "Error analysis", "Explainability",
     "Environment", "Configuration", "Warnings", "References",
 ]
 
@@ -64,7 +64,7 @@ class Report:
         return "\n".join(out)
 
     def save(self, path: Path) -> Path:
-        """Write to a NEW timestamped file next to `path` (e.g. outputs/reports/meta_report.md)."""
+        """Write to a NEW timestamped file next to `path` (e.g. outputs/ensemble/reports/meta_report.md)."""
         return safe_write(Path(path), self.render())
 
 

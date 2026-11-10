@@ -73,7 +73,7 @@ Parallel work: LLM requests are limited per day, so start them as early as the p
 | Task | Output |
 |---|---|
 | `src/training/train_muril.ipynb` and `train_indicbert.ipynb` (self-contained): sentence-pair dataset, LoRA, class weights, AdamW, early stopping, checkpoint and resume, probabilities for `meta`/`val`/`semeval_test` | Two runnable notebooks |
-| Train **MuRIL** and **IndicBERT** at the same time on two Colab accounts; download both `<model>_results.zip` | Two adapters in `models/finetuned/`, probabilities in `outputs/predictions/` |
+| Train **MuRIL** and **IndicBERT** at the same time on two Colab accounts; download both `<model>_results.zip` | Two adapters in `models/finetuned/`, probabilities in `outputs/<model>/predictions/` |
 | `llm_api.py`: adapters, batching, id check, retries, per-comment cache, daily budget guard, token-limit backoff, parser tests | Tested module |
 | Write the `.env` with real keys for two providers; check each answers a 3-comment test | Providers working |
 | **Batch-size pilot** (100 `val` comments at batch 10, 25, 50, 100) and **prompt choice** (zero-shot vs few-shot) on `val` | `LLM_BATCH_SIZE` and the prompt version chosen |
