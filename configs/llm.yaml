@@ -6,7 +6,7 @@ prompt_file: prompts/stance_system_prompt.md
 
 # Set to true once the prompt is chosen on `val` (end of Day 2). run_llm_batch.py refuses to send
 # semeval_test rows while this is false. After freezing, never edit the prompt; bump its version instead.
-prompt_frozen: false
+prompt_frozen: true
 
 # Few-shot examples: ids from data/processed/train_base.csv (never meta / val / semeval_test).
 # Empty list = zero-shot. Changing the list changes the cache key.
