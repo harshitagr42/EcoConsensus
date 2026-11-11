@@ -83,3 +83,17 @@ def test_missing_comment_column(tmp_path):
 def test_empty_comments_flagged(tmp_path):
     df, info = load_file(_csv(tmp_path, "a.csv", "comment\n#SemST\nok\n"))
     assert df["empty"].tolist() == [True, False] and info.n_empty == 1
+
+
+def test_map_columns_exact_then_word_matches():
+    from src.data_loading import map_columns
+    none = dict.fromkeys(("id", "comment", "claim", "label", "language"))
+    m = map_columns(["Tweet ID", "Tweet", "Stance"], none)
+    assert m == {"id": "Tweet ID", "comment": "Tweet", "claim": None, "label": "Stance", "language": None}
+    m = map_columns(["No", "Comment Text", "Statement", "Stance Label"], none)
+    assert (m["comment"], m["claim"], m["label"]) == ("Comment Text", "Statement", "Stance Label")
+    m = map_columns(["comments", "labels"], none)
+    assert (m["comment"], m["label"]) == ("comments", "labels")
+    m = map_columns(["comment_id", "text"], none)                     # comment_id is the id, not the comment
+    assert (m["id"], m["comment"]) == ("comment_id", "text")
+    assert map_columns(["a", "b"], {**none, "comment": "b"})["comment"] == "b"

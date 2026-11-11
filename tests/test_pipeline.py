@@ -150,11 +150,53 @@ def test_file_run_end_to_end(tmp_path, evaluator_file, stubs, monkeypatch, capsy
     assert set(pred["Predicted_Label"]) <= {"Favour", "None", "Against"}
     assert inf.run(["--file", str(evaluator_file), "-q", "--no-llm", "--label-style", "file",
                     "-o", str(tmp_path / "out")]) == 0
-    assert len(list((out / "archive").iterdir())) == 2                  # first result + predictions kept
+    assert len(list((out / "archive").iterdir())) == 3                  # first result, predictions, evaluation kept
     assert len(list((out / "reports").iterdir())) == 2
     assert set(pd.read_csv(out / "predictions.csv", keep_default_na=False)["Predicted_Label"]) <= {"FAVOR", "NONE", "AGAINST"}
     assert len(list((out / "predictions").glob("inference_*_detailed.csv"))) == 2
     assert len(list((out / "metrics").glob("inference_*.json"))) == 2
+
+
+@pytest.mark.parametrize("columns, labelled", [
+    (["Comments"], False),                                              # comments only -> prediction-only
+    (["Comment Text", "Stance Label"], True),                           # comments + stance, unusual headers
+    (["Tweet ID", "Statement", "Tweet", "Stance"], True),               # + a statement (claim) column
+])
+def test_file_shapes(tmp_path, stubs, capsys, columns, labelled):
+    inf = _load_script("inference")
+    data = {"Comments": [r[1] for r in ROWS], "Comment Text": [r[1] for r in ROWS], "Tweet": [r[1] for r in ROWS],
+            "Stance Label": [r[2] for r in ROWS], "Stance": [r[2] for r in ROWS], "Tweet ID": [r[0] for r in ROWS],
+            "Statement": ["Climate change and global warming is a serious concern."] * len(ROWS)}
+    f = tmp_path / "shape.csv"
+    pd.DataFrame({c: data[c] for c in columns}).to_csv(f, index=False)
+    assert inf.run(["-f", str(f), "--inspect"]) == 0
+    shown = capsys.readouterr().out
+    assert ("Run type: EVALUATION" in shown) == labelled and ("PREDICTION ONLY" in shown) == (not labelled)
+    if "Statement" in columns:
+        assert "Claim / statement column 'Statement' found" in shown
+    assert inf.run(["-f", str(f), "--json", "-o", str(tmp_path)]) == 0
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["evaluated"] == labelled
+    assert summary["columns"]["comment"] in ("Comments", "Comment Text", "Tweet")
+    if labelled:
+        ev = pd.read_csv(summary["evaluation"])
+        assert {"MuRIL", "IndicBERT", "LLM-A", "LLM-B", "Ensemble (stacked)"} <= set(ev["system"])
+        assert ev["macro_f1"].is_monotonic_decreasing and "f1_against" in ev and "ci95_low" in ev
+    else:
+        assert summary["evaluation"] is None
+    if "Tweet ID" in columns:
+        assert summary["columns"] == {"id": "Tweet ID", "comment": "Tweet", "label": "Stance"}  # Statement not used
+        assert pd.read_csv(summary["predictions"], dtype=str)["ID"].tolist() == [r[0] for r in ROWS]
+
+
+def test_statement_column_with_another_claim_is_reported(tmp_path, stubs):
+    inf = _load_script("inference")
+    f = tmp_path / "s.csv"
+    pd.DataFrame({"comment": [r[1] for r in ROWS], "statement": "Climate Change is a Real Concern",
+                  "stance": [r[2] for r in ROWS]}).to_csv(f, index=False)
+    assert inf.run(["-f", str(f), "-q", "-o", str(tmp_path)]) == 0
+    result = (tmp_path / "inference" / "result.txt").read_text(encoding="utf-8")
+    assert "claim column 'statement' is not used" in result and "--claim-col" in result
 
 
 def test_file_run_default_folder_and_json(tmp_path, evaluator_file, stubs, monkeypatch, capsys):

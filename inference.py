@@ -135,7 +135,7 @@ def effective_config(args) -> dict:
 # ---------------------------------------------------------------- --inspect
 def inspect(p: Path, cfg: dict) -> int:
     import pandas as pd
-    from src.data_loading import find_column, read_table
+    from src.data_loading import map_columns, read_table
     raw, info = read_table(p, cfg["delimiter"], cfg["encoding"])
     cols = list(raw.columns)
     print(f"File      : {p}")
@@ -144,16 +144,17 @@ def inspect(p: Path, cfg: dict) -> int:
     print(f"Columns   : {cols}\n")
     with pd.option_context("display.max_columns", 20, "display.width", 160, "display.max_colwidth", 60):
         print(raw.head(5).to_string(), "\n")
-    planned = {}
-    for role, key in (("id", "id_col"), ("comment", "text_col"), ("label", "label_col"), ("claim", "claim_col"),
-                      ("language", "language_col")):
-        if role == "claim" and not cfg[key]:            # never auto-detected: the fixed claim is used
-            planned[key] = None
-            continue
-        try:
-            planned[key] = find_column(cols, role, cfg[key])
-        except Exception as e:  # noqa: BLE001
-            planned[key] = f"ERROR: {e}"
+    roles = {"id": "id_col", "comment": "text_col", "label": "label_col", "claim": "claim_col",
+             "language": "language_col"}
+    try:
+        found = map_columns(cols, {r: cfg[k] for r, k in roles.items()})
+    except Exception as e:  # noqa: BLE001  (a named column that does not exist)
+        print(f"ERROR: {e}")
+        return 2
+    planned = {k: found[r] for r, k in roles.items()}
+    claim_seen = None
+    if not cfg["claim_col"] and planned["claim_col"]:     # found, but only used when named
+        claim_seen, planned["claim_col"] = planned["claim_col"], None
     lab = planned["label_col"]
     if lab and not str(lab).startswith("ERROR") and lab in raw:
         vc = raw[lab].astype(str).str.strip().value_counts()
@@ -170,8 +171,19 @@ def inspect(p: Path, cfg: dict) -> int:
         print(f"  {k:<13} {planned[k]}" + ("" if planned[k] or k != "id_col" else "  (row number is used)"))
     print(f"  fixed_claim   {cfg['fixed_claim']}")
     print(f"  use_llm       {cfg['use_llm']}  llm_budget {cfg['llm_budget']}")
+    if claim_seen:
+        vals = raw[claim_seen].astype(str).str.strip().value_counts()
+        print(f"\nClaim / statement column '{claim_seen}' found ({len(vals)} distinct value(s), e.g. "
+              f"{vals.index[0][:60]!r}). It is NOT used: every comment is paired with fixed_claim, the claim the "
+              f"models were trained on. Pass --claim-col {claim_seen!r} to use the column instead.")
     if planned["text_col"] is None:
         print("\nNo comment column found: set text_col in CONFIG or pass --text-col NAME.")
+    elif planned["label_col"]:
+        print(f"\nRun type: EVALUATION. Stance labels from '{planned['label_col']}'; the run scores every system "
+              f"and writes outputs/inference/evaluation.csv and result.txt.")
+    else:
+        print("\nRun type: PREDICTION ONLY (no stance / label column found). If the file has one, pass "
+              "--label-col NAME to get the evaluation.")
     return 0
 
 
@@ -198,6 +210,8 @@ def build_report(df, res, models, cfg, args, data_path, info, llm_used: list[str
         f"- Command: `{' '.join(sys.argv)}`",
         f"- File: `{data_path}` (encoding {info.encoding}, delimiter {info.delimiter!r})",
         f"- Columns used: " + ", ".join(f"{k}=`{v}`" for k, v in info.mapping.items() if v),
+        f"- Claim: fixed claim \"{df['claim'].iloc[0]}\"" + (f" (column `{info.claim_col_ignored}` found and not used; "
+                                                         f"--claim-col uses it)" if info.claim_col_ignored else ""),
         f"- Rows read: {len(df)}; empty comments after cleaning: {n_empty} (predicted, but left out of the metrics)",
         f"- Labelled rows scored: {int(scored.sum())}" + ("" if has_labels else " (no labels: prediction-only run)"),
         "- Label counts: " + ", ".join(f"{LABELS[i]} {int(dist[i])}" for i in range(3)),
@@ -337,6 +351,25 @@ def build_report(df, res, models, cfg, args, data_path, info, llm_used: list[str
                         "less reliable than the LLMs.")
     rep.add("References", "Models, datasets and libraries: `docs/REFERENCES.md`.")
     return rep, metrics_out
+
+
+def evaluation_table(metrics_out: dict):
+    """One row per system, best Macro-F1 first: what `outputs/inference/evaluation.csv` holds."""
+    import pandas as pd
+    from src.config import LABELS
+    from src.pipeline import DISPLAY
+    rows = []
+    for s, m in metrics_out.items():
+        b = m.get("bootstrap") or {}
+        row = dict(system=DISPLAY[s], key=s, n=m["n"], coverage=round(m["coverage"], 4),
+                   macro_f1=round(m["macro_f1"], 4), ci95_low=round(b["low"], 4) if b else None,
+                   ci95_high=round(b["high"], 4) if b else None, accuracy=round(m["accuracy"], 4),
+                   weighted_f1=round(m["weighted_f1"], 4), mcc=round(m["mcc"], 4), kappa=round(m["kappa"], 4))
+        for c in LABELS:
+            for k in ("precision", "recall", "f1"):
+                row[f"{k}_{c}"] = round(m["per_class"][c][k], 4)
+        rows.append(row)
+    return pd.DataFrame(rows).sort_values("macro_f1", ascending=False, kind="stable")
 
 
 # ---------------------------------------------------------------- main
@@ -523,7 +556,12 @@ def _write_file_results(args, cfg, df, info, res, models, data_path, out_root, l
     result_p, arch1 = write_latest(out_root / "result.txt", text, out_root / "archive")
     pred_p, arch2 = write_latest(out_root / "predictions.csv", pred_csv, out_root / "archive")
     md_p = safe_write(out_root / "reports" / f"result_{ts}.md", text, add_timestamp=False)
-    for a in (arch1, arch2):
+    eval_p, arch3 = (write_latest(out_root / "evaluation.csv", evaluation_table(metrics_out).to_csv(index=False),
+                                  out_root / "archive") if metrics_out else (None, None))
+    if not metrics_out:
+        log.warning("No stance / label column found, so this was a PREDICTION-ONLY run (no evaluation). If the file "
+                    "has labels, pass --label-col NAME (python inference.py --inspect shows the columns).")
+    for a in (arch1, arch2, arch3):
         if a:
             log.info("previous file archived: %s", a)
 
@@ -550,10 +588,11 @@ def _write_file_results(args, cfg, df, info, res, models, data_path, out_root, l
     for w in rep.warnings:
         log.warning("%s", w)
 
-    paths = dict(report=str(result_p), predictions=str(pred_p), markdown=str(md_p), details=str(det_p),
-                 metrics=str(met_p), log=log_file)
+    paths = dict(report=str(result_p), predictions=str(pred_p), evaluation=str(eval_p) if eval_p else None,
+                 markdown=str(md_p), details=str(det_p), metrics=str(met_p), log=log_file)
     if args.json:
         summary = dict(file=str(data_path), rows=len(df), empty_rows=int(df["empty"].sum()), mode=args.mode,
+                       evaluated=bool(metrics_out), columns={k: v for k, v in info.mapping.items() if v},
                        label_counts=pd.Series(final).value_counts().to_dict(),
                        used=pd.Series(source).value_counts().to_dict(),
                        macro_f1={s: m["macro_f1"] for s, m in metrics_out.items()}, **paths)
@@ -563,7 +602,8 @@ def _write_file_results(args, cfg, df, info, res, models, data_path, out_root, l
         print("\nMacro-F1 on", data_path.name)
         for s, m in sorted(metrics_out.items(), key=lambda kv: -kv[1]["macro_f1"]):
             print(f"  {s:<14} {m['macro_f1']:.4f}  (acc {m['accuracy']:.4f}, coverage {m['coverage']:.0%})")
-    print(f"\nReport      : {result_p}\nPredictions : {pred_p}\nMarkdown    : {md_p}\nDetails     : {det_p}\n"
+    print(f"\nReport      : {result_p}\nPredictions : {pred_p}" + (f"\nEvaluation  : {eval_p}" if eval_p else
+          "\nEvaluation  : none (no labels in the file)") + f"\nMarkdown    : {md_p}\nDetails     : {det_p}\n"
           f"Metrics     : {met_p}\nLog         : {log_file}")
     return 0
 

@@ -171,6 +171,7 @@ flowchart TD
 |---|---|---|
 | `outputs/inference/result.txt` | The full report (latest) | Previous file moved to `outputs/inference/archive/result_<time>.txt` first |
 | `outputs/inference/reports/result_<time>.md` | The same report in Markdown | Timestamped, never reused |
+| `outputs/inference/evaluation.csv` | One row per system with all metrics (only when the file has stance labels) | Previous file moved to `outputs/inference/archive/` first |
 | `outputs/inference/predictions.csv` | `ID`, `Predicted_Label` (the PS prediction file; label from `--mode`, default the ensemble) | Previous file moved to `outputs/inference/archive/` first |
 | `outputs/inference/logs/inference_<time>.txt` | Run log | Timestamped |
 | `outputs/inference/predictions/inference_<time>_detailed.csv` | Every component's output per comment | Timestamped |

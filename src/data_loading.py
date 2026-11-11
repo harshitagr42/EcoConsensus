@@ -10,6 +10,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -42,6 +43,7 @@ class LoadInfo:
     n_empty: int = 0
     has_labels: bool = False
     unknown_labels: dict[str, int] = field(default_factory=dict)
+    claim_col_ignored: str | None = None
     warnings: list[str] = field(default_factory=list)
 
 
@@ -104,16 +106,59 @@ def _norm(c) -> str:
     return str(c).strip().lower().lstrip("﻿")
 
 
-def find_column(columns: list[str], role: str, override: str | None = None) -> str | None:
+def _tokens(c) -> list[str]:
+    """'Comment Text' / 'stance_label' / 'Tweets' -> ['comment', 'text'] / ['stance', 'label'] / ['tweets']."""
+    return [t for t in re.split(r"[^0-9a-z\u0900-\u09ff]+", _norm(c)) if t]
+
+
+def _fuzzy_match(column, alias: str) -> bool:
+    """The alias appears as a word in the column name, singular or plural ('Comments', 'Stance Label', 'Tweet ID')."""
+    toks = _tokens(column)
+    want = _tokens(alias)
+    for i in range(len(toks) - len(want) + 1):
+        if all(t == w or t == w + "s" or t == w + "es" for t, w in zip(toks[i:i + len(want)], want)):
+            return True
+    return False
+
+
+def find_column(columns: list[str], role: str, override: str | None = None, exclude=()) -> str | None:
+    """The column for a role: the override if given, else an exact alias, else an alias found as a word in the
+    column name (columns in `exclude`, already taken by another role, are skipped)."""
     norm = {_norm(c): c for c in columns}
     if override:
         if _norm(override) in norm:
             return norm[_norm(override)]
         raise LoaderError(f"Column '{override}' (for {role}) not found. Columns: {list(columns)}")
     for alias in ALIASES.get(role, []):
-        if alias in norm:
+        if alias in norm and norm[alias] not in exclude:
             return norm[alias]
+    for alias in ALIASES.get(role, []):
+        for c in columns:
+            if c not in exclude and _fuzzy_match(c, alias):
+                return c
     return None
+
+
+# exact aliases for every role first, then word matches; the most generic role (comment) is matched last
+ROLE_ORDER = ["id", "label", "claim", "language", "comment"]
+
+
+def map_columns(columns: list[str], overrides: dict[str, str | None]) -> dict[str, str | None]:
+    """{role: column or None} for id / comment / claim / label / language; one column never serves two roles."""
+    m: dict[str, str | None] = {}
+    for role in ROLE_ORDER:                                   # overrides and exact names
+        if overrides.get(role):
+            m[role] = find_column(columns, role, overrides[role])
+    for role in ROLE_ORDER:
+        if role in m:
+            continue
+        taken = {v for v in m.values() if v}
+        norm = {_norm(c): c for c in columns if c not in taken}
+        m[role] = next((norm[a] for a in ALIASES.get(role, []) if a in norm), None)
+    for role in ROLE_ORDER:                                   # word matches for what is still missing
+        if m[role] is None:
+            m[role] = find_column(columns, role, exclude={v for v in m.values() if v})
+    return {r: m[r] for r in ("id", "comment", "claim", "label", "language")}
 
 
 def normalise_label(value, label_map: dict[str, str] | None = None) -> str | None:
@@ -147,13 +192,19 @@ def load_file(p: str | Path, *, id_col=None, text_col=None, label_col=None, clai
         raw, info = read_table(p, delimiter, encoding, header=False)    # a number = column position, no header row
         info.warnings.append("column given by position: the file is read without a header row")
         cols = list(raw.columns)
-    m = {
-        "id": find_column(cols, "id", id_col),
-        "comment": find_column(cols, "comment", text_col),
-        "claim": find_column(cols, "claim", claim_col) if (detect_claim or claim_col) else None,
-        "label": find_column(cols, "label", label_col),
-        "language": find_column(cols, "language", language_col),
-    }
+    m = map_columns(cols, dict(id=id_col, comment=text_col, claim=claim_col, label=label_col, language=language_col))
+    if not (detect_claim or claim_col) and m["claim"]:
+        # a claim / statement column is reported but not used: the models were trained on the fixed claim
+        info.claim_col_ignored = m["claim"]
+        vals = {preprocess(str(v)).lower().rstrip(".") for v in raw[m["claim"]].dropna().unique()}
+        fixed = preprocess(fixed_claim or FIXED_CLAIM).lower().rstrip(".")
+        same = vals == {fixed}
+        if not same and vals:
+            info.warnings.append(f"claim column '{m['claim']}' is not used: every row is paired with the fixed claim, "
+                                 f"but the column holds {len(vals)} other value(s), e.g. {sorted(vals)[0][:60]!r}. "
+                                 f"Pass --claim-col {m['claim']!r} to use it instead (the models were trained on the "
+                                 f"fixed claim only)")
+        m["claim"] = None
     info.mapping = m
     if m["comment"] is None:
         raise LoaderError(f"No comment column found in {p}. Columns: {cols}. Set text_col / --text-col.")

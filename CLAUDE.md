@@ -26,7 +26,7 @@ Phase 1 (experiment, `experiment/`) is done: LoRA chosen for both models. Phase 
 - `src/evaluate.py`: scores every model that has outputs (baselines, both transformers, LLM cache, votes, stacked) → `outputs/evaluate/`.
 - `src/pipeline.py` (used by the root script `inference.py`: model loading, components, per-row fallback). `inference.py`
   classifies one comment (`-t`) or a file (default: the one data file in `data/test/`, full report + `predictions.csv`
-  in `outputs/inference/`); its guide `INFERENCE.md` sits next to it; the project report is `papers/final_report/REPORT.md` (`papers/` is git-ignored: never commit it).
+  in `outputs/inference/`, plus `evaluation.csv` when the file has a stance column); its guide `INFERENCE.md` sits next to it; the project report is `papers/final_report/REPORT.md` (`papers/` is git-ignored: never commit it).
 - `tests/` (pytest; CI: `.github/workflows/tests.yml` runs them on every push, without torch, `data/` tests skip;
   `tests/test_pipeline.py` runs `inference.py` end to end (one comment and a file) with stub transformers and a stub LLM).
 

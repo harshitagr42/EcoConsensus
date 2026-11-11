@@ -7,7 +7,7 @@ This page sits next to `inference.py` in the repository root. If the code and th
 `inference.py` has two inputs:
 
 - **One comment** (`-t "text"`): prints the label and each component's vote. One request per LLM.
-- **A file**: the single data file in `data/test/` (default) or any file given with `-f PATH`. Every system runs (baselines, both transformers, both LLMs in batches, votes, stacked ensemble), and the full report and the prediction file are written to `outputs/inference/`. If the file has labels, the report compares all systems.
+- **A file**: the single data file in `data/test/` (default) or any file given with `-f PATH`. Every system runs (baselines, both transformers, both LLMs in batches, votes, stacked ensemble), and the report and the prediction file are written to `outputs/inference/`. If the file also has a stance (label) column, the run is an **evaluation**: it scores every system against those labels and writes `evaluation.csv` and the full comparison in `result.txt`. Without one it is prediction-only.
 
 LLM answers are cached per comment, so a repeated comment costs nothing.
 
@@ -110,10 +110,10 @@ python inference.py -t "some comment" --json
 ## 3. Evaluator day: scoring a test file in about a minute
 
 1. **Put the file in `data/test/`** (create the folder if needed). Keep only one data file there.
-2. **Look at it:** `python inference.py --inspect`. It prints the file's columns, the first 5 rows, the distinct values in the likely label column, and the configuration it would use. It runs no model.
+2. **Look at it:** `python inference.py --inspect`. It prints the file's columns, the first 5 rows, the distinct values in the likely label column, the configuration it would use, whether a claim / statement column was found, and the **run type**: `EVALUATION` (stance column found) or `PREDICTION ONLY`. It runs no model.
 3. **Fix the configuration if the guess is wrong**, either by editing the `CONFIG` block at the top of `inference.py` or by adding flags to the command (flags win over the block, and the block wins over auto-detection).
 4. **Run:** `python inference.py` (add `--no-llm` if the internet or the API keys are not available).
-5. **Read** `outputs/inference/result.txt`. The prediction file is `outputs/inference/predictions.csv`.
+5. **Read** `outputs/inference/evaluation.csv` (one row per system, best Macro-F1 first) and `outputs/inference/result.txt` (the full report). The prediction file is `outputs/inference/predictions.csv`.
 
 If something goes wrong, the message names the column, label value or file involved and says what to change.
 
@@ -144,12 +144,28 @@ CONFIG = {
 
 Numeric labels are **never** mapped by default, because `0/1/2` can mean different things in different files. If the file uses numbers, add them yourself, for example `{"0": "favour", "1": "none", "2": "against"}` (only after checking what the file means; `--inspect` shows the distinct values).
 
+### Which columns the file may have
+
+| Column | Needed | How it is found |
+|---|---|---|
+| Comment | Yes | `comment`, `text`, `tweet`, `sentence`, `content`, `message`, `post`, `review`, … |
+| Stance (true label) | No; with it the run is an evaluation | `stance`, `label`, `class`, `category`, `gold`, `y` |
+| Claim / statement | No | `claim`, `statement`, `target`, `topic`, `hypothesis`: shown, but **not used** unless you pass `--claim-col` |
+| Id | No (row number otherwise) | `id`, `comment_id`, `index`, `sno`, … |
+| Language | No | `language`, `lang` |
+
+An exact name wins; otherwise a name that contains one of these words also counts, singular or plural (`Comment Text`, `Comments`, `Stance Label`, `Tweet ID`). One column never serves two roles. The full alias lists are in `configs/base.yaml` (`aliases`).
+
+**Claim / statement column.** The models were trained on the fixed claim *"Climate change and global warming is a serious concern."*, so every comment is paired with that claim even when the file has its own statement column. If the column holds the same sentence, nothing is said; if it holds something else (another wording, or a translation), the run warns and names `--claim-col` in case you want to use it. Only do that when the statement really is a different claim.
+
 ### Typical test-file shapes and what to do
 
 | What the file looks like | What to set |
 |---|---|
 | `ID,Target,Tweet,Stance` with FAVOR / AGAINST / NONE | Nothing; auto-detect handles it (`Target` is ignored: the fixed claim is used unless you set `claim_col`) |
 | `id,comment,label` with Favour / Against / None | Nothing |
+| `Comments` only | Nothing; prediction-only (no `evaluation.csv`) |
+| `Comment Text, Statement, Stance` | Nothing; the statement column is reported and not used |
 | `comment_id,yt_comment,stance` with 0 / 1 / 2 | `--text-col yt_comment --id-col comment_id --label-col stance --label-map "0=favour,1=none,2=against"` (confirm the meaning first) |
 | Only one column of comments, no header | Add `--text-col 0` (a number picks the column by position when there is no header) |
 | Labels in Hindi or Bengali words | Add them to `label_map`, for example `"पक्ष": "favour"` |
@@ -249,6 +265,7 @@ One comment writes only its log. A file run writes everything below `outputs/inf
 | `result.txt` | The full report (latest). The previous one is moved to `archive/` first |
 | `reports/result_<time>.md` | The same report as Markdown, timestamped |
 | `predictions.csv` | `ID,Predicted_Label` for every row, the problem-statement prediction file (previous one archived) |
+| `evaluation.csv` | Only when the file has stance labels: one row per system (majority, TF-IDF, MuRIL, IndicBERT, LLM-A, LLM-B, soft vote, majority vote, ensemble), best Macro-F1 first, with coverage, Macro-F1 and its bootstrap 95% interval, accuracy, weighted-F1, MCC, kappa, and precision / recall / F1 per class (previous one archived) |
 | `logs/inference_<time>.txt` | Exact command, configuration, per-step log, warnings |
 | `predictions/inference_<time>_detailed.csv` | Every component's output per comment (transformer probabilities, LLM answers, each system's label, meta-model variant, ensemble probabilities, final label and its source) |
 | `metrics/inference_<time>.json` | The numbers behind the report |
@@ -259,7 +276,7 @@ Nothing is ever overwritten without being kept first. All reports are produced b
 
 ### Reading `result.txt`
 
-1. **Header:** time, command, file, rows read, rows dropped (empty comments) and why, label counts.
+1. **Header:** time, command, file, columns used, the claim (and any claim column found but not used), rows read, rows dropped (empty comments) and why, label counts.
 2. **Comparison table:** Macro-F1 (first, with a bootstrap 95% interval), accuracy, weighted-F1, MCC, kappa and per-class F1 for: majority, TF-IDF, MuRIL, IndicBERT, best transformer, LLM-A, LLM-B, best LLM, soft vote, majority vote, **ensemble**. "Best" is chosen on this same file and the report says so. A closing line states whether the ensemble beats the best single system.
 3. **Per-class table:** precision, recall, F1 for Favour, None, Against, for every system.
 4. **Confusion matrices:** rows are true labels, columns are predictions.
@@ -296,6 +313,8 @@ With no labels, sections 2–5 and 7 are replaced by a prediction summary: label
 | Wrong column picked | Set `--text-col`, `--id-col`, `--label-col` explicitly |
 | Numeric labels rejected ("Numeric labels found and no map") | Pass `--label-map "0=favour,1=none,2=against"` (only if that is what the file means) |
 | "More than one data file in data/test/" | Move extras out, or use `--file` |
+| "PREDICTION-ONLY run" although the file has stance labels | The label column has an unusual name: `--label-col NAME` |
+| "claim column '…' is not used" | Expected: the fixed claim is used. Pass `--claim-col NAME` only if the statement is really a different claim |
 | "Unknown label values: …" | Add them to `label_map`, or `--allow-unknown-labels` |
 | "LLM-A unavailable" | Missing key, rate limit or no internet: fill `.env`, wait for the daily reset, or `--no-llm` |
 | Many rows dropped | Empty or whitespace-only comments; the report header gives the count |

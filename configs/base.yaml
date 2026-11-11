@@ -65,10 +65,11 @@ preprocessing:
   handle_token: "@USER"
   url_token: "URL"
 
-# Column aliases for the flexible loader (matched after strip + lower-case).
+# Column aliases for the flexible loader (matched after strip + lower-case; if no exact name matches, an alias found
+# as a word in the column name also counts, singular or plural: 'Comment Text', 'Stance Label', 'Tweets').
 aliases:
   id: [id, idx, index, sno, s.no, serial, comment_id]
-  comment: [comment, text, tweet, premise, sentence, content, body, review_text, yt_comment]
+  comment: [comment, text, tweet, premise, sentence, content, body, review_text, yt_comment, message, post, review]
   claim: [claim, target, topic, hypothesis, statement]
   label: [label, stance, class, category, gold, y]
   language: [language, lang]
