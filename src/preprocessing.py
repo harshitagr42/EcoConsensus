@@ -1,4 +1,4 @@
-"""The ONE text-cleaning function used everywhere (prepare_data, baselines, LLM calls, test.py, inference.py).
+"""The ONE text-cleaning function used everywhere (prepare_data, baselines, LLM calls, inference.py).
 
 Rules (TRD §5): NFC, noise list (#SemST, leading RT) removed, URLs -> URL, @handles -> @USER,
 '#' dropped from hashtags (word kept), whitespace collapsed. Emojis, case, punctuation and every script are kept.

@@ -29,7 +29,7 @@ Carry-over to the build: the weak `against` class (IndicBERT/LoRA scored 0.044 F
 flowchart LR
     D1[Day 1: foundations, data, splits, baselines, reporting] --> D2[Day 2: transformer training code + both trainings, LLM module, prompt pilot]
     D2 --> D3[Day 3: LLM cache runs, features, meta-model]
-    D3 --> D4[Day 4: test.py, inference.py, SemEval test]
+    D3 --> D4[Day 4: inference.py, SemEval test]
     D4 --> D5[Day 5: docs check, dry runs, report, slides]
 ```
 
@@ -118,27 +118,29 @@ Parallel work: LLM requests are limited per day, so start them as early as the p
 
 ---
 
-## Day 4 (Thu): `test.py`, `inference.py`, SemEval test ☐
+## Day 4 (Thu): `inference.py` (one comment and test file), SemEval test ☐
+
+`test.py` was later merged into `inference.py` (TRD decision 33); the rows below use the merged names.
 
 **Where:** Mac
 
 | Task | Output |
 |---|---|
 | `pipeline.py`: shared code that runs components on rows, picks the fallback per comment | Shared module |
-| `test.py`: file discovery, `TEST_CONFIG`, flags, `--inspect`, label map, run, report, prediction file, archive | Working test runner |
+| `inference.py` file run: file discovery, `CONFIG`, flags, `--inspect`, label map, run, report, prediction file, archive | Working test runner |
 | Report sections: comparison, per-class, confusion matrices, by script group, LLM usage, error analysis, explainability, environment, configuration | `result.txt` and `.md` |
-| Run `test.py` on SemEval (copy it into `test/` as a stand-in evaluator file) | First full comparison |
+| Run `inference.py` on SemEval (copy it into `data/test/` as a stand-in evaluator file) | First full comparison |
 | Try odd files: renamed columns, TSV, XLSX, numeric labels, no labels, no claim column, one with Latin-only text | Passing checks |
 | `inference.py`: one comment and file modes, flags from `INFERENCE.md` (repo root) | Working CLI |
 
 **Delivers:** the headline comparison and both entry points.
 
 **Sign-off checklist**
-- [ ] `test.py --inspect` shows columns, sample rows and distinct labels.
-- [ ] A new `TEST_CONFIG` for a differently named file works in under a minute.
+- [ ] `inference.py --inspect` shows columns, sample rows and distinct labels.
+- [ ] A new `CONFIG` in `inference.py` for a differently named file works in under a minute.
 - [ ] `result.txt` shows majority, TF-IDF, MuRIL, IndicBERT, best transformer, LLM-A, LLM-B, best LLM and the ensemble.
 - [ ] `predictions.csv` has `ID` and `Predicted_Label` for every row.
-- [ ] Running twice keeps the first report in `test/archive/` and `test/reports/`.
+- [ ] Running twice keeps the first report in `outputs/inference/archive/` and `outputs/inference/reports/`.
 - [ ] `semeval_test` was used only for this comparison.
 - [ ] If the ensemble does not beat the best single model, the report says so plainly.
 
@@ -151,7 +153,7 @@ Parallel work: LLM requests are limited per day, so start them as early as the p
 | Task | Output |
 |---|---|
 | README (setup on macOS, Linux, Windows; run each stage; limitations; machine-translation note; every source cited) | README |
-| Check `INFERENCE.md`, `TESTING.md` (repo root) and `REFERENCES.md` against the real code and flags; fix differences | Matching docs |
+| Check `INFERENCE.md` (repo root) and `REFERENCES.md` against the real code and flags; fix differences | Matching docs |
 | Add the name of the translation LLM and the two classification LLMs to `REFERENCES.md` | Complete citations |
 | Dry run as the evaluator: fresh clone, fresh environment, README only, a surprise test file | Verified instructions |
 | Run at least once on macOS and once on Linux (Colab shell counts); follow the Windows steps in `INFERENCE.md` if a Windows machine is available | OS check |
@@ -160,7 +162,7 @@ Parallel work: LLM requests are limited per day, so start them as early as the p
 | Buffer | None, ideally |
 
 **Sign-off checklist**
-- [ ] `test.py` runs from a fresh clone on a file with unknown columns after a config change only.
+- [ ] `inference.py` runs from a fresh clone on a file with unknown columns after a config change only.
 - [ ] No key appears in the repo or logs.
 - [ ] README steps reproduce the baselines.
 - [ ] The report states the limitations (translation, small `against` class, domain gap).
@@ -176,7 +178,7 @@ Parallel work: LLM requests are limited per day, so start them as early as the p
 | Mon | "Data, splits and baselines work" |
 | Tue | "Both transformers are trained and the LLM prompt is frozen" |
 | Wed | "The meta-model is trained" |
-| Thu | "`test.py` and `inference.py` work and I have the comparison" |
+| Thu | "`inference.py` works on one comment and on a file, and I have the comparison" |
 | Fri | "Someone else can run it, and the report is written" |
 
 ## Progress rules

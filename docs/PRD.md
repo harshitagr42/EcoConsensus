@@ -1,9 +1,9 @@
 # Product Requirements Document (PRD)
 
 **Project:** EcoConsensus — Stance Detection in Media on Global Warming for Indic Languages (CSET 346, NLP)
-**Version:** v2 (replaces the v1 draft; updated for the professor's PS, `test.py`, the new datasets and the experiment results)
+**Version:** v2 (replaces the v1 draft; updated for the professor's PS, the evaluator test run, the new datasets and the experiment results)
 **Timeline:** about 5 days (Mon 9 Nov – Fri 13 Nov 2026). The PS lists all dates as "to be announced", so shift the plan if the real dates differ.
-**Companions:** `TRD.md`, `APP_FLOW.md`, `IMPLEMENTATION_PLAN.md`, `STACKING_ENSEMBLE.md`, `../INFERENCE.md`, `../TESTING.md` (repo root), `LLM_PROMPT.md`, `REFERENCES.md`
+**Companions:** `TRD.md`, `APP_FLOW.md`, `IMPLEMENTATION_PLAN.md`, `STACKING_ENSEMBLE.md`, `../INFERENCE.md` (repo root), `LLM_PROMPT.md`, `REFERENCES.md`
 
 If a feature is not in section 4, it is not in the build.
 
@@ -27,14 +27,14 @@ This order (0 = favour, 1 = none, 2 = against) matches the Pol-NLI `entailment` 
 
 **Method:** two local transformers (MuRIL, IndicBERT v2) fine-tuned with LoRA, and two LLMs called through APIs, combined by a **stacked meta-model**. It is compared against two baselines (majority class, TF-IDF + logistic regression).
 
-**No UI.** The project is used through `inference.py` (one comment or a file) and `test.py` (the evaluator's test file).
+**No UI.** The project is used through `inference.py`: one comment, or a file (by default the evaluator's test file in `data/test/`).
 
 ## 2. Who uses it
 
 | User | What they are trying to do |
 |---|---|
 | **Builder (you)** | Train, compare, pick methods from evidence, and write the 8-page report |
-| **Evaluator / professor** | Drop a hidden test file into `test/`, run `test.py`, and read `test/result.txt` and the prediction file |
+| **Evaluator / professor** | Drop a hidden test file into `data/test/`, run `inference.py`, and read `outputs/inference/result.txt` and the prediction file |
 | **Anyone cloning the repo** | Understand and reproduce the work from the README and `docs/` |
 
 ## 3. Goals and non-goals
@@ -63,7 +63,7 @@ Each feature lists who it is for, what it does, and what counts as done.
 - **What:** One loader reads CSV, TSV, JSON, JSON Lines, XLSX and plain text. It maps whatever columns it finds to the internal fields `id`, `comment`, `claim`, `label`, `language`.
 - **Done when:**
   - Auto-detection works from a list of known column names (for example `Tweet`, `text`, `premise` → comment; `Stance`, `label` → label; `ID`, `id` → id).
-  - Explicit overrides in the `TEST_CONFIG` block or by command-line flag always win over auto-detection.
+  - Explicit overrides in the `CONFIG` block of `inference.py` or by command-line flag always win over auto-detection.
   - A missing comment column stops the run with a message that lists the columns found.
   - A missing id column falls back to the 1-based row number. A missing claim column uses the fixed claim. A missing label column switches to prediction-only mode.
   - Label spellings (`FAVOR`, `Favour`, `AGAINST`, `None`, `NONE`, `Neutral`, and so on) are normalised through an editable map. Unknown values are listed and never guessed. Numeric labels are never mapped unless the map says so.
@@ -76,7 +76,7 @@ Each feature lists who it is for, what it does, and what counts as done.
 |---|---|---|---|
 | Pol-NLI subset (Burnham et al., 2024) | 3,517 train + 90 validation (English) | Lower | Training the transformers and baselines; the hold-out slice that trains the meta-model |
 | SemEval-2016 Task 6, climate target | 565 tweets | High | **Own test set and experiments only**. Never used for training or for the meta-model |
-| Evaluator's hidden file | Unknown | Unknown | Final test through `test.py` only |
+| Evaluator's hidden file | Unknown | Unknown | Final test through `inference.py` only |
 
   Each English comment also exists in 6 translated versions (Hindi: pure, code-mix, Hinglish; Bengali: pure, code-mix, Banglish), made once with an LLM. That is 7 versions per comment.
 - **Done when:**
@@ -94,7 +94,7 @@ Each feature lists who it is for, what it does, and what counts as done.
   - Repeated whitespace is collapsed, and empty or whitespace-only comments are flagged, not crashed on.
   - A dataset-specific noise list is removed (for example the `#SemST` tag that ends every SemEval tweet, and a leading `RT`). The list lives in config.
   - Case is preserved for transformers and LLMs. The TF-IDF baseline may lowercase.
-  - One function is used for training, evaluation, LLM prompts, `inference.py` and `test.py`.
+  - One function is used for training, evaluation, LLM prompts and `inference.py`.
   - The preprocessing choices are written up in the report as the "novel preprocessing" bonus item (script-aware handling, romanized text, emoji kept).
 
 ### F4. Stratified, leak-free splitting
@@ -116,7 +116,7 @@ Each feature lists who it is for, what it does, and what counts as done.
 ### F5. Baselines
 - **For:** builder, evaluator
 - **What:** Majority class (the floor) and TF-IDF (character + word n-grams) with logistic regression (the one to beat).
-- **Done when:** both are trained on `train_base`, tuned on `val` only, saved in `models/finetuned/baselines/`, and scored by `test.py` next to every other system.
+- **Done when:** both are trained on `train_base`, tuned on `val` only, saved in `models/finetuned/baselines/`, and scored by `inference.py` next to every other system.
 
 ### F6. Transformer fine-tuning methods
 - **For:** builder
@@ -136,7 +136,7 @@ Each feature lists who it is for, what it does, and what counts as done.
 - **What:** Two LLMs from two different providers classify comments. The code talks to one common interface, so providers change by editing config and `.env`.
 - **Done when:**
   - Provider, model name and key come from `.env` and config, never from code.
-  - Training runs and `test.py` send **batches of comments per request** (default 50, configurable). `inference.py` sends one comment.
+  - Training runs and `inference.py` file runs send **batches of comments per request** (default 50, configurable). `inference.py -t` sends one comment.
   - Every answer is cached on disk **per comment**, so reruns and different batch sizes never spend quota twice.
   - The system prompt in `LLM_PROMPT.md` is versioned, and its version is stored with each cached answer.
   - Unparseable or missing answers are retried in smaller batches, then recorded as `unavailable`, never dropped silently.
@@ -176,15 +176,15 @@ Each feature lists who it is for, what it does, and what counts as done.
 - **What:** Classifies one comment (default) or a file. Full usage in `INFERENCE.md` (repo root).
 - **Done when:** it prints the final label and each component's vote, writes a timestamped log, needs no training code or MLflow, sends exactly one comment to each LLM, and gives a clear message for every failure listed in `APP_FLOW.md`.
 
-### F13. `test.py` (evaluator test runner)
+### F13. `inference.py` on a file (evaluator test run)
 - **For:** evaluator, builder
-- **What:** Runs everything on the file in `test/` and writes the full comparison. Full guide in `TESTING.md` (repo root).
+- **What:** Runs everything on the file in `data/test/` and writes the full comparison. Full guide in `INFERENCE.md` (repo root).
 - **Done when:**
-  - It finds the single data file in `test/`, or takes `--file`.
-  - A `TEST_CONFIG` block at the top of `test.py` (and matching command-line flags) lets you set column names, label spellings, delimiter and claim handling in a minute, with `--inspect` showing the file's columns, sample rows and distinct label values first.
+  - It finds the single data file in `data/test/`, or takes `--file`.
+  - A `CONFIG` block at the top of `inference.py` (and matching command-line flags) lets you set column names, label spellings, delimiter and claim handling in a minute, with `--inspect` showing the file's columns, sample rows and distinct label values first.
   - It compares: majority baseline, TF-IDF baseline, MuRIL, IndicBERT, the **best single transformer**, LLM-A, LLM-B, the **best single LLM**, and **the stacked ensemble**.
-  - It writes `test/result.txt` (latest) plus a timestamped `.md` copy in `test/reports/`; the previous `result.txt` is moved to `test/archive/` first.
-  - It writes the **prediction file** the PS requires (`ID`, `Predicted_Label`) to `test/predictions.csv` (latest, previous one archived). Other outputs go to `outputs/` (logs, per-component predictions, metrics, cache).
+  - It writes `outputs/inference/result.txt` (latest) plus a timestamped `.md` copy in `outputs/inference/reports/`; the previous `result.txt` is moved to `outputs/inference/archive/` first.
+  - It writes the **prediction file** the PS requires (`ID`, `Predicted_Label`) to `outputs/inference/predictions.csv` (latest, previous one archived). Logs, detailed predictions and metrics go to `outputs/inference/`, the LLM cache to `outputs/llm/cache/`.
   - It still produces predictions and a prediction-only report when the file has no labels.
 
 ### F14. Logging and outputs
@@ -229,7 +229,7 @@ Each feature lists who it is for, what it does, and what counts as done.
 | Ensemble Macro-F1 vs TF-IDF | Higher on `semeval_test` |
 | Majority baseline | Reported, to show why Macro-F1 matters |
 | Comparison complete | One table with majority, TF-IDF, both transformers, both LLMs, the best singles and the ensemble |
-| Unknown test file | `test.py` runs on a file with unknown columns after at most a one-line config change |
+| Unknown test file | `inference.py` runs on a file with unknown columns after at most a one-line config change |
 | Reports | Script-generated, nothing overwritten |
 | Reproducible | A fresh clone plus the README reproduces the baselines on a laptop |
 
@@ -251,7 +251,7 @@ If the ensemble does not beat the best single model, that is a valid result, and
 | Machine-translated Hindi/Bengali is noisy | Per-language scores partly reflect translation quality | Spot-check samples; report by variant |
 | LLM free-tier limits or downtime | Incomplete ensemble | Batching, per-comment cache, daily budget, fallback meta-models |
 | Large batches (50+) skip or misalign items | Wrong labels from the LLM | Ids in every item, count check, retry in smaller batches, a small pilot to pick the batch size |
-| Unknown evaluator format | `test.py` fails at the demo | Auto-detection, `TEST_CONFIG`, `--inspect`, flags, clear errors |
+| Unknown evaluator format | `inference.py` fails at the demo | Auto-detection, `CONFIG`, `--inspect`, flags, clear errors |
 | QLoRA failed in the experiment | One method not compared | Report as not run; the final choice is LoRA from the remaining three methods |
 | SemEval subset was used to choose methods | Slightly optimistic test scores | State it in the report; final models are trained only on Pol-NLI |
 | Pol-NLI page states no license | Reuse question | Cite the authors; check with the instructor if the code is published publicly |
@@ -259,7 +259,7 @@ If the ensemble does not beat the best single model, that is a valid result, and
 ## 9. Assumptions
 
 1. The evaluator's file contains at least a comment text column; labels may or may not be present.
-2. The evaluator's comments are in Hindi, Bengali or romanized text, but `test.py` accepts anything.
+2. The evaluator's comments are in Hindi, Bengali or romanized text, but `inference.py` accepts anything.
 3. Every one of the 3,517 + 90 Pol-NLI rows has all 7 versions available (the request estimates depend on this).
 
 ## 10. Open items

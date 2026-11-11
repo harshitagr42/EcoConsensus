@@ -2,7 +2,7 @@
 
 **The code reads `prompts/stance_system_prompt.md` (version `v3`, built from this document).** This document is the design rationale; edit the prompt file, not this one, and bump its `prompt_version:` line on any change.
 **Used for:** stance classification of comments toward the fixed claim, by both LLM providers
-**Used by:** training runs and `test.py` (batches of 50 or more comments) and `inference.py` (one comment). The same prompt and the same reply format serve both; a single comment is just a batch of one.
+**Used by:** training runs and `inference.py` on a file (batches of 50 or more comments) and `inference.py -t` (one comment). The same prompt and the same reply format serve both; a single comment is just a batch of one.
 
 Send the system prompt as the *system* message and the filled-in template (section 2) as the *user* message. Use temperature 0. If the provider has a "JSON mode", turn it on; if it has a "thinking" or "reasoning" mode, turn it off (it wastes tokens and quota).
 

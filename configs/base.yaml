@@ -47,8 +47,7 @@ outputs:
     llm: LLM cache fills, pilots and prompt checks (src/training/run_llm_batch.py)
     ensemble: feature tables and meta-model training (train_inference.py, train_meta.py)
     evaluate: metrics and report for every model (src/evaluate.py)
-    inference: inference.py
-    test: test.py
+    inference: inference.py (one comment, or a test file from data/test/ with the full report)
   kinds: [logs, metrics, predictions, reports]
 
 splits:

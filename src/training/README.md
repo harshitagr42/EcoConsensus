@@ -76,6 +76,6 @@ Every script writes into its own folder `outputs/<component>/{logs,metrics,predi
 | `llm` | `run_llm_batch.py`; the LLM cache is `outputs/llm/cache/` |
 | `ensemble` | `train_inference.py` (feature tables) and `train_meta.py` (meta report) |
 | `evaluate` | `src/evaluate.py` |
-| `inference`, `test` | `inference.py`, `test.py` (Day 4) |
+| `inference` | `inference.py` (Day 4): one comment, or a test file from `data/test/` |
 
 Each component has its own MLflow store: `mlflow ui --backend-store-uri sqlite:///outputs/<component>/metrics/mlflow.db`.

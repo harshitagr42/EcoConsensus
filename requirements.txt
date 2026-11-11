@@ -1,4 +1,4 @@
-# Mac / Linux / Windows: data prep, baselines, LLM runs, meta-model, tests, (later) test.py and inference.py.
+# Mac / Linux / Windows: data prep, baselines, LLM runs, meta-model, tests, inference.py.
 # Python >= 3.13. Versions tested in the experiment (TRD §2).
 numpy>=2.0
 pandas==3.1.1
@@ -10,7 +10,7 @@ joblib>=1.4
 openpyxl>=3.1
 mlflow==3.18.0
 pytest>=8.0
-# Transformer inference (needed by test.py / inference.py on Day 4; training happens in the Colab notebooks)
+# Transformer inference (needed by inference.py; training happens in the Colab notebooks)
 torch==2.14.1
 transformers==5.22.2
 peft==0.21.2

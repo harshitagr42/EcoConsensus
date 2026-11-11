@@ -24,13 +24,14 @@ Phase 1 (experiment, `experiment/`) is done: LoRA chosen for both models. Phase 
   The notebooks are committed with their Colab outputs; patch cells in place rather than regenerating them.
 - `src/training/run_llm_batch.py`, `train_inference.py` (joins probs + LLM cache → `features_<split>.csv`), `train_meta.py`.
 - `src/evaluate.py`: scores every model that has outputs (baselines, both transformers, LLM cache, votes, stacked) → `outputs/evaluate/`.
-- `src/pipeline.py` (shared by the root scripts `test.py` and `inference.py`: model loading, components, per-row fallback);
-  guides `TESTING.md` / `INFERENCE.md` sit in the root next to them; the project report is `papers/final_report/REPORT.md` (`papers/` is git-ignored: never commit it).
+- `src/pipeline.py` (used by the root script `inference.py`: model loading, components, per-row fallback). `inference.py`
+  classifies one comment (`-t`) or a file (default: the one data file in `data/test/`, full report + `predictions.csv`
+  in `outputs/inference/`); its guide `INFERENCE.md` sits next to it; the project report is `papers/final_report/REPORT.md` (`papers/` is git-ignored: never commit it).
 - `tests/` (pytest; CI: `.github/workflows/tests.yml` runs them on every push, without torch, `data/` tests skip;
-  `tests/test_pipeline.py` runs both scripts end to end with stub transformers and a stub LLM).
+  `tests/test_pipeline.py` runs `inference.py` end to end (one comment and a file) with stub transformers and a stub LLM).
 
 Specs: `docs/TRD.md` (decision log §20 — append when a decision changes), `docs/STACKING_ENSEMBLE.md`, `docs/APP_FLOW.md`,
-`docs/IMPLEMENTATION_PLAN.md`; the user guides `INFERENCE.md` and `TESTING.md` sit in the root next to `inference.py` / `test.py`. The LLM prompt the code reads is
+`docs/IMPLEMENTATION_PLAN.md`; the user guide `INFERENCE.md` sits in the root next to `inference.py`. The LLM prompt the code reads is
 `prompts/stance_system_prompt.md` (`prompt_version: v3`); `docs/LLM_PROMPT.md` is its rationale.
 
 ## Commands
@@ -46,7 +47,7 @@ python -m src.training.run_llm_batch --provider a b --split meta val [--check|--
 python -m src.training.train_inference
 python -m src.training.train_meta
 python -m src.evaluate [--splits val meta]
-python test.py [--inspect] [--no-llm]               # the one data file in test/ -> test/result.txt, predictions.csv
+python inference.py [--inspect] [--no-llm]          # the one data file in data/test/ -> outputs/inference/result.txt, predictions.csv
 python inference.py -t "comment" [--no-llm] [--json]
 mlflow ui --backend-store-uri sqlite:///outputs/<component>/metrics/mlflow.db
 ```

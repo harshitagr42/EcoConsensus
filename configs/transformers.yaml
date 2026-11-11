@@ -1,6 +1,6 @@
 # Transformer components. Training runs in the self-contained Colab notebooks
 # (src/training/train_muril.ipynb, src/training/train_indicbert.ipynb); their CONFIG cell mirrors these values.
-# Local code (train_inference, later test.py / inference.py) reads the model names, adapter folders and max_length here.
+# Local code (train_inference, inference.py) reads the model names, adapter folders and max_length here.
 
 max_length: 128
 method: lora

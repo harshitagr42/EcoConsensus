@@ -1,7 +1,7 @@
 """Deterministic report writing (plain Python, no AI). Nothing is ever overwritten.
 
 - Timestamped reports go through `safe_write` (create-only, `_2`, `_3` on a clash).
-- "Latest" files such as test/result.txt are first moved to an archive folder under their own timestamp,
+- "Latest" files such as outputs/inference/result.txt are first moved to an archive folder under their own timestamp,
   then the new file is written.
 """
 from __future__ import annotations

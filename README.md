@@ -10,7 +10,7 @@ Stance detection on global warming for Hindi and Bengali comments (CSET 346 NLP 
 | Experiment (`experiment/prepare_data.py`, `experiment/experiment.ipynb`) | Done on Colab; LoRA chosen for both models |
 | Data, baselines, LLM layer, stacking scripts (`src/`, `src/training/`) | Written (Days 1–3); runbook in `src/training/README.md` |
 | MuRIL and IndicBERT (LoRA) | Trained on Colab (2026-11-10); scored with `python -m src.evaluate` |
-| `test.py`, `inference.py` (`src/pipeline.py`) | Written (Day 4); guides `TESTING.md`, `INFERENCE.md` |
+| `inference.py` (`src/pipeline.py`): one comment or a test file | Written (Day 4); guide `INFERENCE.md` |
 
 ## Where to start
 
@@ -21,19 +21,18 @@ Stance detection on global warming for Hindi and Bengali comments (CSET 346 NLP 
 | See how everything connects | `docs/APP_FLOW.md` |
 | See the plan and day-by-day sign-offs | `docs/IMPLEMENTATION_PLAN.md` |
 | See how the ensemble is built and trained | `docs/STACKING_ENSEMBLE.md` |
-| Run `inference.py` on macOS, Linux or Windows | `INFERENCE.md` (root) |
-| Score a test file with `test.py` | `TESTING.md` (root) |
+| Run `inference.py` on macOS, Linux or Windows, or score a test file | `INFERENCE.md` (root) |
 | Use the LLM prompt | `prompts/stance_system_prompt.md` |
 
 ## Repository layout
 
-See `docs/TRD.md` section 3. Short version: `data/` (raw, translated, processed), `experiment/` (notebook, setup, generated reports), `src/` (with `src/training/` for data preparation and the Colab notebooks), `models/original` and `models/finetuned`, `outputs/`, `test/` (evaluator data and results), `tests/` (unit tests), `docs/`, `prompts/`.
+See `docs/TRD.md` section 3. Short version: `data/` (raw, translated, processed, `test/` for the evaluator's file), `experiment/` (notebook, setup, generated reports), `src/` (with `src/training/` for data preparation and the Colab notebooks), `models/original` and `models/finetuned`, `outputs/`, `tests/` (unit tests), `docs/`, `prompts/`.
 
 `outputs/` has one folder per component, each with the same four subfolders:
 
 ```text
 outputs/
-├── prepare_data/   baselines/   muril/   indicbert/   llm/   ensemble/   evaluate/   inference/   test/
+├── prepare_data/   baselines/   muril/   indicbert/   llm/   ensemble/   evaluate/   inference/
 │   ├── logs/          # timestamped .txt run logs
 │   ├── metrics/       # mlflow.db (one per component), metrics JSON/CSV
 │   ├── predictions/   # prediction, probability and feature CSVs
@@ -78,7 +77,7 @@ Copy `.env.example` to `.env` and fill in the two LLM providers' details. `.env`
 3. Final training on Colab: MuRIL and IndicBERT **in parallel on two accounts** (`src/training/train_<model>.ipynb`); unzip each `<model>_results.zip` in the project root. Meanwhile `run_llm_batch.py` fills the LLM cache on the Mac.
 4. `train_inference.py` joins both transformers' probabilities and both LLMs' cached answers into feature tables; `train_meta.py` trains the meta-model.
 5. `python -m src.evaluate` scores every model and writes a report to `outputs/evaluate/`.
-6. `test.py` evaluates a dataset placed in `test/` (`TESTING.md`); `inference.py` classifies one comment or a file (`INFERENCE.md`).
+6. `inference.py` classifies one comment, or scores the file placed in `data/test/` (or any `-f` file) with the full comparison report in `outputs/inference/` (`INFERENCE.md`).
 
 ## Data
 
@@ -89,7 +88,7 @@ Full processing notes: `data/raw/readme.md`.
 |---|---|---|---|
 | Pol-NLI (Burnham et al., 2024) | [Hugging Face `mlburnham/Pol_NLI`](https://huggingface.co/datasets/mlburnham/Pol_NLI) · [paper](https://arxiv.org/abs/2409.02078) | **LLM-derived, lower quality** (see below) | Training: `train_base` (1,424 source rows), `meta` (252) for the meta-model, `val` (90) for early stopping |
 | SemEval-2016 Task 6, target "Climate Change is a Real Concern" (Mohammad et al., 2016) | [task page](http://alt.qcri.org/semeval2016/task6/) · [dataset page](https://www.saifmohammad.com/WebPages/StanceDataset.htm) · [paper](https://aclanthology.org/S16-1003/) | Human-annotated FAVOR / NONE / AGAINST | Held-out test (`semeval_test`, 564 tweets); a small subset was used in the method-comparison experiment |
-| Evaluator's hidden test set | given on evaluation day | unknown format | Final test with `test.py` |
+| Evaluator's hidden test set | given on evaluation day | unknown format | Final test with `inference.py` (file in `data/test/`) |
 
 ### Data quality and provenance (read before using the scores)
 
@@ -107,7 +106,7 @@ Full processing notes: `data/raw/readme.md`.
 
 ## Reports
 
-All reports are Markdown (and `.txt` from `test.py`), written only by script code from saved results, with timestamped names. A report is never overwritten; a name clash adds a numeric suffix.
+All reports are Markdown (and `result.txt` from `inference.py`), written only by script code from saved results, with timestamped names. A report is never overwritten; a name clash adds a numeric suffix.
 
 ## Limitations
 

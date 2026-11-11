@@ -3,7 +3,7 @@
 Internal columns: id, source_id, dataset, language, variant, claim, comment, comment_raw, label (int or <NA>),
 label_name, script_group, empty. Only `claim` and `comment` are ever model inputs.
 
-    df, info = load_file("test/my_file.csv", label_col="Stance")
+    df, info = load_file("data/test/my_file.csv", label_col="Stance")
 """
 from __future__ import annotations
 
@@ -24,11 +24,11 @@ DEFAULT_LABEL_MAP: dict[str, str] = {str(k).strip().lower(): v for k, v in BASE[
 
 
 class LoaderError(Exception):
-    """Configuration/column problem (test.py exit code 2)."""
+    """Configuration/column problem (inference.py exit code 2)."""
 
 
 class LabelError(Exception):
-    """Unknown label values (test.py exit code 3)."""
+    """Unknown label values (inference.py exit code 3)."""
 
 
 @dataclass
@@ -138,7 +138,7 @@ def load_file(p: str | Path, *, id_col=None, text_col=None, label_col=None, clai
               allow_unknown_labels: bool = False, dataset: str = "evaluator",
               detect_claim: bool = True) -> tuple[pd.DataFrame, LoadInfo]:
     """Load + map + preprocess one file. Raises LoaderError / LabelError with a readable message.
-    detect_claim=False: a claim column is used only when claim_col names it (test.py / inference.py: SemEval's
+    detect_claim=False: a claim column is used only when claim_col names it (inference.py: SemEval's
     `Target` column must not replace the fixed claim)."""
     raw, info = read_table(p, delimiter, encoding)
     cols = list(raw.columns)

@@ -8,7 +8,7 @@ from src.config import OUTPUT_COMPONENTS, ROOT, out_path
 def test_out_path_is_per_component():
     assert out_path("muril", "predictions") == ROOT / "outputs" / "muril" / "predictions"
     assert out_path("evaluate") == ROOT / "outputs" / "evaluate"
-    for c in ("prepare_data", "baselines", "muril", "indicbert", "llm", "ensemble", "evaluate", "inference", "test"):
+    for c in ("prepare_data", "baselines", "muril", "indicbert", "llm", "ensemble", "evaluate", "inference"):
         assert c in OUTPUT_COMPONENTS
 
 

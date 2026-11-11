@@ -1,4 +1,4 @@
-"""Pipeline, test.py and inference.py end to end on a few rows, with stub transformers and a stub LLM (no torch,
+"""Pipeline and inference.py (one comment and a file) end to end on a few rows, with stub transformers and a stub LLM (no torch,
 no network, no model files)."""
 import importlib.util
 import json
@@ -133,44 +133,61 @@ def test_final_prediction_modes(tmp_path):
     assert "stacked" not in res.preds
 
 
-# ---------------------------------------------------------------- test.py
-def test_test_runner_end_to_end(tmp_path, evaluator_file, stubs, monkeypatch, capsys):
-    t = _load_script("test")
-    monkeypatch.setattr(t, "TEST_DIR", tmp_path / "test")
-    monkeypatch.setattr(t, "OUT_DIR", tmp_path / "out")
-    assert t.run(["--file", str(evaluator_file), "--inspect"]) == 0
+# ---------------------------------------------------------------- inference.py on a file
+def test_file_run_end_to_end(tmp_path, evaluator_file, stubs, monkeypatch, capsys):
+    inf = _load_script("inference")
+    monkeypatch.setattr(inf, "DATA_DIR", tmp_path / "data_test")
+    out = tmp_path / "out" / "inference"
+    assert inf.run(["--file", str(evaluator_file), "--inspect"]) == 0
     assert "Tweet" in capsys.readouterr().out
-    assert t.run(["--file", str(evaluator_file), "-q"]) == 0
-    result = (tmp_path / "test" / "result.txt").read_text(encoding="utf-8")
+    assert inf.run(["--file", str(evaluator_file), "-q", "-o", str(tmp_path / "out")]) == 0
+    result = (out / "result.txt").read_text(encoding="utf-8")
     for section in ("System comparison", "Per-class results", "Confusion matrices", "LLM usage", "Fallback usage",
                     "Error analysis", "Explainability", "Configuration"):
         assert f"## {section}" in result
-    pred = pd.read_csv(tmp_path / "test" / "predictions.csv", dtype=str, keep_default_na=False)  # "None" is a label
+    pred = pd.read_csv(out / "predictions.csv", dtype=str, keep_default_na=False)        # "None" is a label
     assert pred.columns.tolist() == ["ID", "Predicted_Label"] and pred["ID"].tolist() == [r[0] for r in ROWS]
     assert set(pred["Predicted_Label"]) <= {"Favour", "None", "Against"}
-    assert t.run(["--file", str(evaluator_file), "-q", "--no-llm", "--label-style", "file"]) == 0
-    assert len(list((tmp_path / "test" / "archive").iterdir())) == 2          # first result + predictions kept
-    assert len(list((tmp_path / "test" / "reports").iterdir())) == 2
-    assert set(pd.read_csv(tmp_path / "test" / "predictions.csv", keep_default_na=False)["Predicted_Label"]) <= {"FAVOR", "NONE", "AGAINST"}
+    assert inf.run(["--file", str(evaluator_file), "-q", "--no-llm", "--label-style", "file",
+                    "-o", str(tmp_path / "out")]) == 0
+    assert len(list((out / "archive").iterdir())) == 2                  # first result + predictions kept
+    assert len(list((out / "reports").iterdir())) == 2
+    assert set(pd.read_csv(out / "predictions.csv", keep_default_na=False)["Predicted_Label"]) <= {"FAVOR", "NONE", "AGAINST"}
+    assert len(list((out / "predictions").glob("inference_*_detailed.csv"))) == 2
+    assert len(list((out / "metrics").glob("inference_*.json"))) == 2
 
 
-def test_test_runner_errors(tmp_path, stubs, monkeypatch):
-    t = _load_script("test")
-    monkeypatch.setattr(t, "TEST_DIR", tmp_path / "test")
-    monkeypatch.setattr(t, "OUT_DIR", tmp_path / "out")
+def test_file_run_default_folder_and_json(tmp_path, evaluator_file, stubs, monkeypatch, capsys):
+    inf = _load_script("inference")
+    data_dir = tmp_path / "data_test"
+    monkeypatch.setattr(inf, "DATA_DIR", data_dir)
+    data_dir.mkdir()
+    (data_dir / "eval.csv").write_bytes(evaluator_file.read_bytes())
+    assert inf.run(["--json", "--mode", "muril", "-o", str(tmp_path)]) == 0       # the one file in data/test/
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["rows"] == 6 and summary["mode"] == "muril" and "muril" in summary["macro_f1"]
+    assert set(summary["used"]) <= {"muril", "tfidf_lr fallback"}
+    assert len(pd.read_csv(summary["predictions"])) == 6
+    (data_dir / "b.csv").write_text("comment\ny\n")
+    assert inf.run(["-q", "-o", str(tmp_path)]) == 2                    # two data files in data/test/
+
+
+def test_file_run_errors(tmp_path, stubs, monkeypatch):
+    inf = _load_script("inference")
+    monkeypatch.setattr(inf, "DATA_DIR", tmp_path / "missing_dir")
+    o = ["-o", str(tmp_path)]
     num = tmp_path / "num.csv"
     num.write_text("comment,label\nhoax,2\nserious,0\n", encoding="utf-8")
-    assert t.run(["--file", str(num), "-q"]) == 2                       # numeric labels need a map
-    assert t.run(["--file", str(num), "-q", "--label-map", "0=favour,1=none,2=against"]) == 0
-    assert t.run(["--file", str(num), "-q", "--text-col", "nope"]) == 2
-    (tmp_path / "test").mkdir(exist_ok=True)
-    (tmp_path / "test" / "a.csv").write_text("comment\nx\n")
-    (tmp_path / "test" / "b.csv").write_text("comment\ny\n")
-    assert t.run(["-q"]) == 2                                            # two data files in test/
+    assert inf.run(["--file", str(num), "-q", *o]) == 2                 # numeric labels need a map
+    assert inf.run(["--file", str(num), "-q", "--label-map", "0=favour,1=none,2=against", *o]) == 0
+    assert inf.run(["--file", str(num), "-q", "--text-col", "nope", *o]) == 2
+    assert inf.run(["-f", str(tmp_path / "missing.csv"), *o]) == 3
+    assert inf.run(["-q", *o]) == 2                                     # no data/test/ folder
+    assert inf.run(["-f", str(num), "--mode", "llm-a", "--no-llm", *o]) == 2
 
 
-# ---------------------------------------------------------------- inference.py
-def test_inference_one_comment_and_file(tmp_path, evaluator_file, stubs, capsys):
+# ---------------------------------------------------------------- inference.py on one comment
+def test_inference_one_comment(tmp_path, stubs, capsys):
     inf = _load_script("inference")
     assert inf.run(["-t", "global warming is a hoax", "--json", "-o", str(tmp_path)]) == 0
     out = json.loads(capsys.readouterr().out)
@@ -178,8 +195,4 @@ def test_inference_one_comment_and_file(tmp_path, evaluator_file, stubs, capsys)
     assert set(out["votes"]) == {"MuRIL", "IndicBERT", "LLM-A", "LLM-B"}
     assert inf.run(["-t", "x", "--no-llm", "-q", "-o", str(tmp_path)]) == 0
     assert capsys.readouterr().out.strip() in ("Favour", "None", "Against")
-    assert inf.run(["-f", str(evaluator_file), "--text-col", "Tweet", "-o", str(tmp_path), "--json"]) == 0
-    summary = json.loads(capsys.readouterr().out)
-    assert summary["rows"] == 6 and "metrics" in summary
-    assert len(pd.read_csv(summary["predictions"])) == 6
-    assert inf.run(["-f", str(tmp_path / "missing.csv"), "-o", str(tmp_path)]) == 3
+    assert not (tmp_path / "inference" / "result.txt").exists()        # one comment writes only the log

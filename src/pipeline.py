@@ -1,4 +1,4 @@
-"""Shared "run the components on rows" code for test.py and inference.py.
+"""Shared "run the components on rows" code for inference.py (one comment or a file).
 
     models = load_models(needed_components("ensemble"))           # baselines, meta-models (exit 4 if missing)
     res = run_pipeline(df, models, components=..., use_llm=True)  # df from data_loading.load_file
@@ -30,7 +30,7 @@ from src.preprocessing import is_empty, preprocess, script_group
 
 VERSION = "1.0.0"
 
-# exit codes shared by test.py and inference.py (TESTING.md / INFERENCE.md)
+# inference.py exit codes (INFERENCE.md)
 EXIT_OK, EXIT_CONFIG, EXIT_DATA, EXIT_MODELS, EXIT_LLM = 0, 2, 3, 4, 5
 
 DISPLAY = {"majority": "Majority", "tfidf_lr": "TF-IDF + LR", "muril": "MuRIL", "indicbert": "IndicBERT",
@@ -119,7 +119,7 @@ def rows_from_texts(texts: list[str], claim: str | None = None) -> pd.DataFrame:
 
 # ---------------------------------------------------------------- what is needed, and loading it
 def needed_components(mode: str = "ensemble", use_llm: bool = True) -> list[str]:
-    """Components to run for an inference mode. test.py always runs everything ("ensemble")."""
+    """Components to run for an inference mode. A file run reports every system that ran."""
     need = {"ensemble": TRANSFORMERS + LLMS, "transformers": TRANSFORMERS, "muril": ["muril"],
             "indicbert": ["indicbert"], "llm-a": ["llm_a"], "llm-b": ["llm_b"], "tfidf": [], "majority": []}[mode]
     return [c for c in need if use_llm or c not in LLMS]
@@ -270,7 +270,7 @@ def make_llm(slot: str, claim: str, batch_size: int | None, max_requests: int | 
 def llm_labels(slot: str, df: pd.DataFrame, batch_size: int | None = None, max_requests: int | None = None,
                log=None, factory=None) -> tuple[list[int | None], dict]:
     """Label id per row (None = no answer) and a usage summary. Empty comments are never sent.
-    Answers come from the cache first; the rest are sent in batches (inference.py uses batch size 1)."""
+    Answers come from the cache first; the rest are sent in batches (inference.py -t uses batch size 1)."""
     from src.llm_api import FatalProviderError
     factory = factory or make_llm
     labels: list[int | None] = [None] * len(df)
@@ -360,7 +360,7 @@ def run_pipeline(df: pd.DataFrame, models: Models, components: list[str], *, dev
 
 
 def final_prediction(res: PipelineResult, mode: str) -> tuple[np.ndarray, np.ndarray]:
-    """inference.py: the label per row for a --mode and where it came from. A single-LLM mode falls back to TF-IDF
+    """The label per row for a --mode and where it came from. A single-LLM mode falls back to TF-IDF
     on rows the LLM did not answer."""
     key = {"ensemble": "stacked", "transformers": "stacked", "muril": "muril", "indicbert": "indicbert",
            "llm-a": "llm_a", "llm-b": "llm_b", "tfidf": "tfidf_lr", "majority": "majority"}[mode]

@@ -81,7 +81,7 @@ The notebook splits the subset **by tweet**, stratified by label, so all 7 versi
 
 With 300 tweets that is 180 / 60 / 60 tweets (1,260 / 420 / 420 rows). The split is saved under `splits/<id>/` and reused as long as the data and split settings are unchanged.
 
-The claim fed to the model is the project's fixed claim, "Climate change and global warming is a serious concern." (`CLAIM_MODE = "fixed"`), the same text `test.py` and `inference.py` will use. `CLAIM_MODE = "file"` uses the (translated) `Target` column instead.
+The claim fed to the model is the project's fixed claim, "Climate change and global warming is a serious concern." (`CLAIM_MODE = "fixed"`), the same text `inference.py` uses. `CLAIM_MODE = "file"` uses the (translated) `Target` column instead.
 
 ## 5. Before you press Run all
 
@@ -112,7 +112,7 @@ Library versions: cell 2 runs `pip install -U transformers peft accelerate mlflo
 
 1. Open the newest `reports/experiment_report_*.md` on Drive. Section 1 gives the recommendation per model and the baseline comparison.
 2. To browse MLflow on the Mac: download `experiment_outputs/mlflow.db` (and `mlartifacts/` if you want the artifacts), then from that folder run `mlflow ui --backend-store-uri sqlite:///mlflow.db`. Metrics and parameters show up; artifact links point at Drive paths and will not open locally (the same files are in `results/` and `reports/`).
-3. Once a method is chosen for each model, move on to `src/` (final training, LLM component, stacking, `inference.py`, `test.py`).
+3. Once a method is chosen for each model, move on to `src/` (final training, LLM component, stacking, `inference.py`).
 
 ## 8. Troubleshooting
 

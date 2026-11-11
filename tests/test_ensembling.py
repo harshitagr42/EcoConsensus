@@ -30,7 +30,7 @@ def test_fallback_per_row():
     t = make_table(4, drop_llm_a={1, 3}, drop_llm_b={2, 3})
     assert choose_variant(t).tolist() == ["meta_all4", "meta_no_llm_a", "meta_no_llm_b", "meta_transformers"]
     t.loc[0, "muril_available"] = False
-    assert choose_variant(t)[0] is None                      # -> TF-IDF fallback in test.py
+    assert choose_variant(t)[0] is None                      # -> TF-IDF fallback in inference.py
 
 
 def test_predict_with_fallback_and_weights():

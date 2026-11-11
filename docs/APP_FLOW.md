@@ -2,7 +2,7 @@
 
 **Project:** EcoConsensus
 **Version:** v2
-**Companions:** `PRD.md`, `TRD.md`, `STACKING_ENSEMBLE.md`, `../INFERENCE.md`, `../TESTING.md` (repo root)
+**Companions:** `PRD.md`, `TRD.md`, `STACKING_ENSEMBLE.md`, `../INFERENCE.md` (repo root)
 
 There is no UI, so the "screens" are scripts and notebooks and the "clicks" are commands. For each step: what goes in, what happens, what comes next, and where you land when it fails.
 
@@ -13,9 +13,9 @@ There is no UI, so the "screens" are scripts and notebooks and the "clicks" are 
 | Path | Person | Entry point |
 |---|---|---|
 | A. Build | You | `src/training/` scripts, Colab and Kaggle notebooks |
-| B. Inference | Evaluator or you | `inference.py` |
-| C. Evaluator test | Evaluator or you | `test.py` |
-| D. Review | Anyone | `test/result.txt`, `outputs/`, MLflow UI, `docs/` |
+| B. Inference | Evaluator or you | `inference.py -t "comment"` |
+| C. Evaluator test | Evaluator or you | `inference.py` (file in `data/test/`, or `-f PATH`) |
+| D. Review | Anyone | `outputs/inference/result.txt`, `outputs/`, MLflow UI, `docs/` |
 
 ## 2. Big picture
 
@@ -32,12 +32,12 @@ flowchart TD
     G --> I[train_inference: transformer probabilities + cached LLM labels]
     H --> I
     I --> J[Meta-model trained on the meta slice]
-    F --> K[test.py]
+    F --> K[inference.py on a file]
     G --> K
     H --> K
     J --> K
-    K --> L[test/result.txt + predictions.csv + reports]
-    J --> M[inference.py]
+    K --> L[outputs/inference: result.txt + predictions.csv + reports]
+    J --> M[inference.py -t one comment]
     G --> M
 ```
 
@@ -101,17 +101,11 @@ flowchart TD
 - **What happens:** `train_inference.py` runs both transformers on `meta`, `val` and `semeval_test` and joins the cached LLM labels. `train_meta.py` fits the meta-model and the three fallback variants on `meta`, and compares with voting.
 - **Out:** feature tables in `outputs/ensemble/predictions/`, models in `models/finetuned/meta/`.
 
-## 4. Path B: `inference.py`
+## 4. Path B: `inference.py` on one comment
 
 ```mermaid
 flowchart TD
-    S[Run inference.py] --> A{--text or --file?}
-    A -- neither --> E1[Print usage, exit 2]
-    A -- --text --> P[One-row table]
-    A -- --file --> L[Flexible loader]
-    L --> C{Comment column found?}
-    C -- no --> E2[List columns found, exit 2]
-    C -- yes --> P
+    S[Run inference.py -t TEXT] --> P[One-row table]
     P --> T[Preprocess]
     T --> U{Empty after cleaning?}
     U -- yes --> U1[Flag row, warn, skip]
@@ -122,7 +116,7 @@ flowchart TD
     X -- no --> Z[Matching fallback variant]
     Y --> O[Final label]
     Z --> O
-    O --> N[Print result, write log and predictions]
+    O --> N[Print result, write the log]
 ```
 
 What you see for one comment:
@@ -138,27 +132,23 @@ Log     : outputs/inference/logs/inference_<timestamp>.txt
 
 | Situation | What happens |
 |---|---|
-| File not found | Message with the path tried, exit 2 |
-| Unreadable or unknown columns | Message listing columns found and the accepted names |
-| No label column | Prediction-only; no metrics |
-| Unknown label spellings | Values listed; stops unless `--allow-unknown-labels` |
-| Empty comment | Row flagged and skipped, counted |
+| Empty comment | Message, exit 3 |
 | Missing API key | That LLM is skipped; fallback variant used; warning shown |
 | LLM error or rate limit | Retries, then fallback variant for that comment |
 | Adapter files missing | Message names the folder expected, exit 4 |
 | Very long comment | Truncated to 128 tokens; the log notes it |
 | Language other than Hindi, Bengali, English | Still processed; no language gate |
 
-## 5. Path C: `test.py`
+## 5. Path C: `inference.py` on a file (evaluator test)
 
 ```mermaid
 flowchart TD
-    S[Run test.py] --> F{Data file in test/?}
+    S[Run inference.py] --> F{-f PATH given, or one data file in data/test/?}
     F -- none --> E1[Say where to put it, exit 3]
     F -- several --> E2[List them, ask for --file, exit 3]
     F -- one --> I{--inspect?}
     I -- yes --> I1[Print columns, 5 rows, distinct labels, suggested config, exit 0]
-    I -- no --> M[Apply TEST_CONFIG, then flags, then auto-detect]
+    I -- no --> M[Apply CONFIG, then flags, then auto-detect]
     M --> C{Comment column found?}
     C -- no --> E3[List columns found, exit 2]
     C -- yes --> L[Normalise labels with label_map]
@@ -179,18 +169,18 @@ flowchart TD
 
 | File | What it is | Overwrite rule |
 |---|---|---|
-| `test/result.txt` | The full report (latest) | Previous file moved to `test/archive/result_<time>.txt` first |
-| `test/reports/result_<time>.md` | The same report in Markdown | Timestamped, never reused |
-| `test/predictions.csv` | `ID`, `Predicted_Label` (the PS prediction file) | Previous file moved to `test/archive/` first |
-| `outputs/test/logs/test_<time>.txt` | Run log | Timestamped |
-| `outputs/test/predictions/test_<time>_detailed.csv` | Every component's output per comment | Timestamped |
-| `outputs/test/metrics/test_<time>.json` | Numbers behind the report | Timestamped |
+| `outputs/inference/result.txt` | The full report (latest) | Previous file moved to `outputs/inference/archive/result_<time>.txt` first |
+| `outputs/inference/reports/result_<time>.md` | The same report in Markdown | Timestamped, never reused |
+| `outputs/inference/predictions.csv` | `ID`, `Predicted_Label` (the PS prediction file; label from `--mode`, default the ensemble) | Previous file moved to `outputs/inference/archive/` first |
+| `outputs/inference/logs/inference_<time>.txt` | Run log | Timestamped |
+| `outputs/inference/predictions/inference_<time>_detailed.csv` | Every component's output per comment | Timestamped |
+| `outputs/inference/metrics/inference_<time>.json` | Numbers behind the report | Timestamped |
 | `outputs/llm/cache/` | LLM answers per comment | Appended only |
 
 | Situation | What happens |
 |---|---|
 | File in an unexpected format | Tries other delimiters and encodings; if all fail, says which were tried, exit 3 |
-| Wrong columns picked by auto-detect | `--inspect` shows the guess; set `TEST_CONFIG` or use flags |
+| Wrong columns picked by auto-detect | `--inspect` shows the guess; set `CONFIG` or use flags |
 | Numeric labels with no map | Stops and shows the distinct values; you set `label_map` |
 | No labels in the file | Prediction-only report; no metrics |
 | Daily LLM budget reached | Remaining comments use a fallback variant; the report states how many |
@@ -200,7 +190,7 @@ flowchart TD
 
 ## 6. Path D: Review
 
-1. Read `test/result.txt` (or the `.md` copy).
+1. Read `outputs/inference/result.txt` (or the `.md` copy).
 2. Open MLflow: `mlflow ui --backend-store-uri sqlite:///outputs/<component>/metrics/mlflow.db`.
 3. Check `outputs/<component>/logs/` for any run's exact inputs and warnings.
 4. Read the README for how to reproduce each step.

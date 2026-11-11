@@ -35,10 +35,6 @@ experiment/experiment_data.zip
 experiment/experiment_outputs/*
 !experiment/experiment_outputs/reports/
 
-# ---------------------------------------------------------------- evaluator folder: data and generated results
-test/*
-!test/.gitkeep
-
 # ---------------------------------------------------------------- Python
 __pycache__/
 *.py[cod]

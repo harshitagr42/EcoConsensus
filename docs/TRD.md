@@ -2,7 +2,7 @@
 
 **Project:** EcoConsensus
 **Version:** v2
-**Companions:** `PRD.md`, `APP_FLOW.md`, `STACKING_ENSEMBLE.md`, `../INFERENCE.md`, `../TESTING.md` (repo root), `LLM_PROMPT.md`, `REFERENCES.md`
+**Companions:** `PRD.md`, `APP_FLOW.md`, `STACKING_ENSEMBLE.md`, `../INFERENCE.md` (repo root), `LLM_PROMPT.md`, `REFERENCES.md`
 
 Decided once, written down. Any change after sign-off goes in the decision log (section 20).
 
@@ -12,7 +12,7 @@ Decided once, written down. Any change after sign-off goes in the decision log (
 
 | Environment | Used for | Not used for |
 |---|---|---|
-| **MacBook Pro M3, 8 GB** | Writing code, unit tests, preprocessing, splits, baselines, `inference.py`, `test.py`, MLflow UI | Training MuRIL or IndicBERT (memory) |
+| **MacBook Pro M3, 8 GB** | Writing code, unit tests, preprocessing, splits, baselines, `inference.py`, MLflow UI | Training MuRIL or IndicBERT (memory) |
 | **Google Colab (T4, about 14.7–15.8 GB)** | Transformer training, feature building | Long unattended runs (sessions disconnect) |
 | **Kaggle Notebooks (T4/P100)** | Same as Colab, as a backup | Same |
 | **LLM provider APIs (2, free tier)** | Stance classification, translation (done once) | Anything needing guaranteed uptime |
@@ -57,7 +57,7 @@ and `--upgrade` turned on because the packages Colab ships clashed with the pinn
 
 `bitsandbytes` is not installed by the final notebooks (LoRA only). `requirements-train.txt` lists the same pins.
 
-Two requirement files: `requirements.txt` (inference, `test.py`, baselines, reports; **no** `bitsandbytes`) and `requirements-train.txt` (adds training extras for Colab and Kaggle).
+Two requirement files: `requirements.txt` (`inference.py`, baselines, reports; **no** `bitsandbytes`) and `requirements-train.txt` (adds training extras for Colab and Kaggle).
 
 All sources, creators and licences are listed in `REFERENCES.md`.
 
@@ -71,10 +71,8 @@ EcoConsensus/
 ├── README.md
 ├── requirements.txt
 ├── requirements-train.txt
-├── inference.py                  # one comment or a file
-├── INFERENCE.md                  # user guide for inference.py
-├── test.py                       # evaluator test runner (reads test/)
-├── TESTING.md                    # evaluator-day guide for test.py
+├── inference.py                  # one comment, or a file (default: the evaluator file in data/test/)
+├── INFERENCE.md                  # user guide for inference.py (incl. evaluator day)
 ├── configs/
 │   ├── base.yaml                 # paths, seed, labels, fixed claim, aliases, noise list
 │   ├── transformers.yaml         # models, LoRA settings, training settings
@@ -87,7 +85,8 @@ EcoConsensus/
 │   │   └── translated/
 │   │       ├── Hindi/            # pol_nli_data/, SemEval_2016_Task6/ (pure, code-mix, hinglish)
 │   │       └── Bengali/          # pol_nli_data/, SemEval_2016_Task6/ (pure, code-mix, banglish)
-│   └── processed/                # frozen splits + split report
+│   ├── processed/                # frozen splits + split report
+│   └── test/                     # the evaluator's test file goes here (read by inference.py)
 ├── experiment/                   # finished method-comparison work (notebook, report, SETUP.md)
 ├── models/
 │   ├── original/                 # pointers to base models (names, revisions)
@@ -97,7 +96,7 @@ EcoConsensus/
 │       ├── baselines/            # tfidf_lr.joblib, majority.json
 │       └── meta/                 # meta_all4, meta_no_llm_a, meta_no_llm_b, meta_transformers
 ├── outputs/                      # one folder per component (decision 28), all git-ignored
-│   ├── <component>/              # prepare_data, baselines, muril, indicbert, llm, ensemble, evaluate, inference, test
+│   ├── <component>/              # prepare_data, baselines, muril, indicbert, llm, ensemble, evaluate, inference
 │   │   ├── logs/                 # timestamped .txt run logs
 │   │   ├── metrics/              # mlflow.db (one per component), metrics JSON/CSV
 │   │   ├── predictions/          # prediction / probability / feature CSVs
@@ -116,21 +115,16 @@ EcoConsensus/
 │   ├── llm_api.py                # provider adapters, batching, parsing, cache, retry
 │   ├── ensembling.py             # feature builder, meta-model, fallback selection
 │   ├── reporting.py              # deterministic report writer, never overwrites
-│   ├── pipeline.py               # shared "run components on rows" code for inference/test
+│   ├── pipeline.py               # shared "run components on rows" code for inference.py
 │   ├── utils.py                  # seeding, logging, safe file writing
 │   ├── evaluate.py               # metrics + report for every model that has outputs
 │   └── training/                 # prepare_data, Colab notebooks, LLM batch, features, meta-model (section 9)
-├── test/                         # evaluator file goes here; results are written here too
-│   ├── result.txt                # latest report (created by test.py)
-│   ├── predictions.csv           # latest prediction file (created by test.py)
-│   ├── reports/                  # timestamped .md copies
-│   └── archive/                  # previous result.txt / predictions.csv
-└── tests/                        # unit tests (not the evaluator folder)
+└── tests/                        # unit tests
 ```
 
 Rules:
-- All logic lives in `src/` so the Mac, `inference.py` and `test.py` run the same code. **Exception:** the two Colab training notebooks (`src/training/train_muril.ipynb`, `train_indicbert.ipynb`) are self-contained single files (decision 19); they read text already cleaned by `src/preprocessing.py` through `prepare_data.py`.
-- `inference.py` and `test.py` import nothing from `src/training/` and never import MLflow.
+- All logic lives in `src/` so the Mac and `inference.py` run the same code. **Exception:** the two Colab training notebooks (`src/training/train_muril.ipynb`, `train_indicbert.ipynb`) are self-contained single files (decision 19); they read text already cleaned by `src/preprocessing.py` through `prepare_data.py`.
+- `inference.py` imports nothing from `src/training/` and never import MLflow.
 
 ## 4. Data contract
 
@@ -145,7 +139,7 @@ Rules:
 |---|---|---|---|
 | Pol-NLI | `premise` | fixed (or `hypothesis`) | `entailment`: 0 favour, 1 none, 2 against (the `review` column is dropped) |
 | SemEval | `Tweet` | fixed (the `Target` text is ignored by default) | `Stance`: FAVOR → 0, NONE → 1, AGAINST → 2 |
-| Evaluator file | Auto-detected or from `TEST_CONFIG` | Fixed unless `claim_col` is set | Through `label_map` |
+| Evaluator file | Auto-detected or from `CONFIG` (`inference.py`) | Fixed unless `claim_col` is set | Through `label_map` |
 
 - **Variants:** `english/original`, `hindi/pure_hindi`, `hindi/hindi_code_mix`, `hindi/hinglish`, `bengali/pure_bengali`, `bengali/bengali_code_mix`, `bengali/banglish`.
 
@@ -274,7 +268,7 @@ LLM_B_API_KEY=
 LLM_B_BASE_URL=
 LLM_B_DAILY_LIMIT=
 LLM_B_EXTRA_BODY=
-LLM_BATCH_SIZE=50         # comments per request in training runs and test.py
+LLM_BATCH_SIZE=50         # comments per request in training runs and inference.py file runs
 HF_TOKEN=                 # optional, for Hugging Face downloads
 ```
 
@@ -298,22 +292,22 @@ Features per comment (12 numbers): MuRIL 3 probabilities, IndicBERT 3 probabilit
 
 - Deterministic Python only; no AI call anywhere.
 - All files are written through one `safe_write()` that never overwrites: it adds a timestamp, and if the name still exists it adds a counter (`_2`, `_3`).
-- `result.txt` and `predictions.csv` in `test/` are "latest" files: the previous one is moved to `test/archive/` (named with its original timestamp) before the new one is written.
+- `result.txt` and `predictions.csv` in `outputs/inference/` are "latest" files: the previous one is moved to `outputs/inference/archive/` (named with its original timestamp) before the new one is written.
 - Report sections: header, data summary, system comparison, per-class results, confusion matrices, results by script group, LLM usage, fallback usage, error analysis, explainability, environment, configuration, warnings, references pointer.
 - The experiment report format (`experiment_report_<timestamp>.md`) stays as it is.
 
-## 13. `test.py`
+## 13. `inference.py` on a file (evaluator test)
 
-Behaviour in short (details in `TESTING.md`, repo root):
-- Lives in the repo root, reads `test/`, writes into `test/` and `outputs/`.
-- A `TEST_CONFIG` block at the top holds: `data_file`, `id_col`, `text_col`, `label_col`, `claim_col`, `language_col`, `label_map`, `delimiter`, `encoding`, `fixed_claim`, `use_llm`, `llm_budget`. Command-line flags override it. `--inspect` prints columns, sample rows and distinct label values without running any model.
+Behaviour in short (details in `INFERENCE.md`, repo root; decision 33):
+- Lives in the repo root. Without `-t`/`-f` it reads the single data file in `data/test/`; `-f PATH` takes any file. Writes everything into `outputs/inference/` (`result.txt`, `predictions.csv`, `archive/`, `reports/`, `logs/`, `predictions/`, `metrics/`).
+- A `CONFIG` block at the top holds: `data_file`, `id_col`, `text_col`, `label_col`, `claim_col`, `language_col`, `label_map`, `delimiter`, `encoding`, `fixed_claim`, `use_llm`, `llm_budget`. Command-line flags override it. `--inspect` prints columns, sample rows and distinct label values without running any model.
 - Runs every component, picks the **best single transformer** and **best single LLM** by Macro-F1 on the same file (shown in the report), and applies the stacked ensemble with automatic fallback per row.
-- LLM calls are batched (`LLM_BATCH_SIZE`) and cached.
+- LLM calls are batched (`LLM_BATCH_SIZE`) and cached. `--mode` picks which system's label goes into `predictions.csv` (default the ensemble).
 - Exit codes: `0` success, `2` configuration or column error, `3` data error, `4` missing model files, `5` all LLMs unavailable and `--require-llm` set.
 
-## 14. `inference.py`
+## 14. `inference.py` on one comment
 
-Behaviour in short (details in `INFERENCE.md`, repo root): one comment by default, or a file; one request per LLM; component selection with `--mode`; same loader, preprocessing and meta-models as `test.py`.
+Behaviour in short (details in `INFERENCE.md`, repo root): `-t TEXT`; one request per LLM; component selection with `--mode`; prints the label and each component's vote and writes only a log. Same preprocessing and meta-models as a file run.
 
 ## 15. Experiment tracking (MLflow)
 
@@ -346,13 +340,13 @@ On the Mac, small and fast (`tests/`):
 - Metrics on hand-made predictions
 - Reporting never overwrites and archives `result.txt`
 - Meta-model fallback selection per row
-- End-to-end smoke test of `test.py` and `inference.py` on a handful of rows with a stubbed LLM
+- End-to-end smoke test of `inference.py` (one comment and a file) on a handful of rows with a stubbed LLM
 
 ## 19. Code style, security, reproducibility
 
 - **Comments:** a short header per file saying what it is for, and comments only where the reason is not obvious. No line-by-line narration.
 - Seeds for Python, NumPy and PyTorch are set in one `set_seed()`; library versions are recorded in every run.
-- Keys only in `.env` (or Colab and Kaggle secrets). `.gitignore` covers `.env`, `outputs/` (cache, logs, predictions, MLflow), `mlruns/`, `mlflow.db`, large weights and `test/*` data files (not the result files' folder structure).
+- Keys only in `.env` (or Colab and Kaggle secrets). `.gitignore` covers `.env`, `outputs/` (cache, logs, predictions, MLflow), `mlruns/`, `mlflow.db`, large weights
 - LoRA adapters (about 5 MB each) may be committed; full base-model weights never are.
 - `joblib` files (TF-IDF, meta-models) are scikit-learn pickles. Only load files you created yourself.
 
@@ -367,7 +361,7 @@ On the Mac, small and fast (`tests/`):
 | 5 | Class-weighted loss | Class imbalance, Macro-F1 primary |
 | 6 | Provider-agnostic LLM layer | Free tiers are unreliable |
 | 7 | Hold-out slice for the meta-model | Fits free-tier request limits and needs no extra training runs |
-| 8 | Training on Colab or Kaggle; code, `test.py` and inference on the Mac | 8 GB RAM |
+| 8 | Training on Colab or Kaggle; code and `inference.py` on the Mac | 8 GB RAM |
 | 9 | Pol-NLI trains; SemEval tests only | Quality of labels; SemEval is the own test |
 | 10 | Label order favour 0, none 1, against 2 | Matches Pol-NLI and the experiment |
 | 11 | Full fine-tuning removed | Plan change; four methods compared |
@@ -392,3 +386,4 @@ On the Mac, small and fast (`tests/`):
 | 30 | `test.py` and `inference.py` share `src/pipeline.py` (load models, run components, per-row meta-model fallback, TF-IDF when no variant applies). Transformers are loaded one at a time (base model from the Hub + LoRA adapter); LLM answers are cached as in training. Their guides `TESTING.md` and `INFERENCE.md` moved from `docs/` to the repo root, next to the scripts | User decision (2026-11-11): each guide beside its script |
 | 31 | In `test.py` / `inference.py` a claim column is used only when named (`claim_col` / `--claim-col`); SemEval's `Target` is ignored. Numeric labels are never mapped by default; empty comments are predicted but not scored and never sent to an LLM | Fixed claim is what the models learned; `0/1/2` is ambiguous |
 | 32 | The final system stays the four-component stacked ensemble (`meta_all4` with fallbacks); no component is removed, although LLM-A alone scored higher on `semeval_test` (0.779 vs 0.650) | User decision (2026-11-11); choosing on the test split would be leakage; reported plainly in the project report (`papers/final_report/REPORT.md`) |
+| 33 | `test.py` merged into `inference.py` (replaces the split in decisions 15 and 30): one script for one comment (`-t`) and for a file; with no input it reads the single data file in `data/test/`. All results, including `result.txt` / `predictions.csv` and their archive, go to `outputs/inference/`; the root `test/` folder, the `test` output component and `TESTING.md` are gone (guide merged into `INFERENCE.md`) | User decision (2026-11-11): no duplicate scripts; `test/` next to `tests/` was confusing |

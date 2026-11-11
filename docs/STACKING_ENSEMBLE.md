@@ -81,7 +81,7 @@ Rules that protect the results:
 | S3 | `run_llm_batch.py` (once per provider) | Anywhere | Prompt choice on `val`, then fill the cache for `meta` in batches. Resumes daily | `outputs/llm/cache/` |
 | S4 | `train_inference.py --split meta` (also `val`, `semeval_test`) | Colab | Run both transformers on the split, join cached LLM answers, write the feature table | `outputs/ensemble/predictions/features_<split>.csv` |
 | S5 | `train_meta.py` | Mac or Colab | Fit the meta-model with grouped cross-validation inside `meta` to pick `C`; fit the final model on all of `meta`; fit fallback variants; compare with voting | `models/finetuned/meta/` |
-| S6 | `test.py` | Mac | Run all components on the test file, apply the meta-model, write reports | `test/` and `outputs/` |
+| S6 | `inference.py` (file in `data/test/`) | Mac | Run all components on the test file, apply the meta-model, write reports | `outputs/inference/` |
 
 S1 and S2 are independent of S3, so on a day when LLM quota is the bottleneck, run S3 in the background while Colab trains.
 
@@ -98,7 +98,7 @@ An LLM may be unavailable (limit reached, no key, outage). A meta-model trained 
 | `meta_no_llm_b` | 9 | LLM-B unavailable |
 | `meta_transformers` | 6 | Both LLMs unavailable |
 
-`test.py` and `inference.py` pick the variant **per comment** and write which one was used into the report and the log. Both LLMs and one transformer missing (weights not found) is not handled by stacking: the run falls back to the TF-IDF baseline and says so.
+`inference.py` picks the variant **per comment** and write which one was used into the report and the log. Both LLMs and one transformer missing (weights not found) is not handled by stacking: the run falls back to the TF-IDF baseline and says so.
 
 ## 7. Request budget
 
@@ -163,7 +163,7 @@ Bigger batches save requests but can make an LLM skip items, shift answers by on
 
 ## 11. What goes into the final reports
 
-Per comment in `test.py` output: all component outputs, the meta-model variant used, and the final label. Per run: the weights of the meta-model, how often each fallback was used, LLM requests used, cache hits, parse errors.
+Per comment in the `inference.py` file-run output: all component outputs, the meta-model variant used, and the final label. Per run: the weights of the meta-model, how often each fallback was used, LLM requests used, cache hits, parse errors.
 
 ## 12. Risks
 
