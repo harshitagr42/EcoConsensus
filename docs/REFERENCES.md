@@ -1,6 +1,6 @@
 # References and acknowledgements
 
-Every external library, model, dataset and LLM used in this project. Copy this list into the README and the technical report. Entries marked **TO FILL** need information that is not available yet.
+Every external library, model, dataset and LLM used in this project. Copy this list into the README and the technical report.
 
 ---
 
@@ -8,13 +8,13 @@ Every external library, model, dataset and LLM used in this project. Copy this l
 
 - **Pol-NLI** (training data). Burnham, M., Kahn, K., Wang, R. Y., and Peng, R. X. (2024). *Political DEBATE: Efficient Zero-shot and Few-shot Classifiers for Political Text.* arXiv:2409.02078. Dataset: Hugging Face `mlburnham/Pol_NLI`. The dataset page states no license; check the terms before publishing the data. This project uses a subset (3,517 training and 90 validation rows) produced by `data/raw/original/pol_nli_data/process_pol_nli.py`, with the `entailment` column read as 0 favour, 1 none, 2 against.
 - **SemEval-2016 Task 6** (own test set and experiments only). Mohammad, S. M., Kiritchenko, S., Sobhani, P., Zhu, X., and Cherry, C. (2016). *SemEval-2016 Task 6: Detecting Stance in Tweets.* In Proceedings of the 10th International Workshop on Semantic Evaluation (SemEval-2016), pp. 31–41. Companion article: Mohammad, S. M., Sobhani, P., and Kiritchenko, S. (2017). *Stance and Sentiment in Tweets.* ACM Transactions on Internet Technology 17(3), Article 26. arXiv:1605.01655.
-- **Hindi and Bengali versions** of both datasets are machine translations made once with an LLM. The Pol-NLI three-class labels were refined from binary entailment labels with the help of an LLM (Claude), so they are silver labels. **TO FILL:** name and version of the translation LLM and the date.
+- **Hindi and Bengali versions** of both datasets are machine translations made once with an LLM. The Pol-NLI three-class labels were refined from binary entailment labels with the help of an LLM (Claude), so they are silver labels. *translation LLM: antropics, cluade Opus and 5.5, November 2026*
 
 ## Models
 
 - **MuRIL** (`google/muril-base-cased`). Khanuja, S. et al. (2021). *MuRIL: Multilingual Representations for Indian Languages.* arXiv:2103.10730. Google Research. Check the licence on the model card.
 - **IndicBERT v2** (`ai4bharat/IndicBERTv2-MLM-only`). Doddapaneni, S., Aralikatte, R., Ramesh, G., Goyal, S., Khapra, M. M., Kunchukuttan, A., and Kumar, P. (2023). *Towards Leaving No Indic Language Behind: Building Monolingual Corpora, Benchmark and Models for Indic Languages.* In Proceedings of ACL 2023 (Long Papers). arXiv:2212.05409 (`papers/2212.05409v3.pdf`). AI4Bharat. Check the licence on the model card.
-- **LLM-A and LLM-B** (stance classification through APIs). **TO FILL:** provider, model name, model version or access date for each.
+- **LLM-A and LLM-B** (stance classification through APIs). LLM-A: gemini, gemini flash lite, version 3.5. LLM-B: groq, openai gpt-oss-20b.
 
 ## Methods
 
@@ -43,7 +43,7 @@ Every external library, model, dataset and LLM used in this project. Copy this l
 
 ## Compute
 
-- Google Colab (T4 GPU) for the experiment and training. **TO FILL:** add Kaggle if used for any run.
+- Google Colab (T4 GPU) for the experiment and training.
 
 ## Papers kept in `papers/`
 
@@ -66,4 +66,4 @@ CSET 346 Natural Language Processing, Project Assignment: "Detecting Stance in M
 
 ## Writing and code assistance
 
-**TO FILL if applicable:** the course asks students to mention LLMs used. State here whether an AI assistant helped with code or documents. Generated reports are produced by deterministic scripts and contain no AI-written text.
+- Code: Claude (Anthropic) via Claude Code, November 2026.
