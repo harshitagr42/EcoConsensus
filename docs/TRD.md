@@ -75,7 +75,6 @@ EcoConsensus/
 ├── INFERENCE.md                  # user guide for inference.py
 ├── test.py                       # evaluator test runner (reads test/)
 ├── TESTING.md                    # evaluator-day guide for test.py
-├── REPORT.md                     # short project report
 ├── configs/
 │   ├── base.yaml                 # paths, seed, labels, fixed claim, aliases, noise list
 │   ├── transformers.yaml         # models, LoRA settings, training settings
@@ -104,7 +103,7 @@ EcoConsensus/
 │   │   ├── predictions/          # prediction / probability / feature CSVs
 │   │   └── reports/              # generated .md reports (timestamped)
 │   └── llm/cache/                # LLM answers, one record per comment + daily usage counters
-├── papers/
+├── papers/                       # reference PDFs + final_report/REPORT.md (git-ignored)
 ├── src/
 │   ├── __init__.py
 │   ├── config.py                 # load YAML + .env, resolve paths
@@ -392,4 +391,4 @@ On the Mac, small and fast (`tests/`):
 | 29 | `src/evaluate.py` scores every available system (baselines, transformers, LLMs from cache, soft/majority vote, stacked) on `val`, `meta`, `semeval_test` and writes a report; `stacked` is not scored on `meta` (in-sample). No requests, no tuning | User request: one command for the metrics of every model |
 | 30 | `test.py` and `inference.py` share `src/pipeline.py` (load models, run components, per-row meta-model fallback, TF-IDF when no variant applies). Transformers are loaded one at a time (base model from the Hub + LoRA adapter); LLM answers are cached as in training. Their guides `TESTING.md` and `INFERENCE.md` moved from `docs/` to the repo root, next to the scripts | User decision (2026-11-11): each guide beside its script |
 | 31 | In `test.py` / `inference.py` a claim column is used only when named (`claim_col` / `--claim-col`); SemEval's `Target` is ignored. Numeric labels are never mapped by default; empty comments are predicted but not scored and never sent to an LLM | Fixed claim is what the models learned; `0/1/2` is ambiguous |
-| 32 | The final system stays the four-component stacked ensemble (`meta_all4` with fallbacks); no component is removed, although LLM-A alone scored higher on `semeval_test` (0.779 vs 0.650) | User decision (2026-11-11); choosing on the test split would be leakage; reported plainly in `REPORT.md` |
+| 32 | The final system stays the four-component stacked ensemble (`meta_all4` with fallbacks); no component is removed, although LLM-A alone scored higher on `semeval_test` (0.779 vs 0.650) | User decision (2026-11-11); choosing on the test split would be leakage; reported plainly in the project report (`papers/final_report/REPORT.md`) |
