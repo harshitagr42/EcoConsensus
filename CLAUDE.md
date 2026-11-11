@@ -8,7 +8,7 @@ Stance detection (CSET 346 NLP course project): given the fixed claim **"Climate
 
 ## Current state (check before assuming code exists)
 
-Phase 1 (experiment, `experiment/`) is done: LoRA chosen for both models. Phase 2 code for Days 1–3 exists
+Phase 1 (experiment, `experiment/`) is done: LoRA chosen for both models. Phase 2 code for Days 1–4 exists
 (runbook: `src/training/README.md`):
 - `configs/{base,transformers,llm}.yaml`; `src/config.py`, `utils.py` (seed, logging, `safe_write`, MLflow), `preprocessing.py`
   (the one cleaning function), `data_loading.py` (flexible evaluator loader), `splitting.py`, `metrics.py`, `reporting.py`,
@@ -24,10 +24,13 @@ Phase 1 (experiment, `experiment/`) is done: LoRA chosen for both models. Phase 
   The notebooks are committed with their Colab outputs; patch cells in place rather than regenerating them.
 - `src/training/run_llm_batch.py`, `train_inference.py` (joins probs + LLM cache → `features_<split>.csv`), `train_meta.py`.
 - `src/evaluate.py`: scores every model that has outputs (baselines, both transformers, LLM cache, votes, stacked) → `outputs/evaluate/`.
-- `tests/` (pytest; CI: `.github/workflows/tests.yml` runs them on every push, without torch, `data/` tests skip). Not written yet (Day 4+): `src/pipeline.py`, `test.py`, `inference.py`, README.
+- `src/pipeline.py` (shared by the root scripts `test.py` and `inference.py`: model loading, components, per-row fallback);
+  guides `TESTING.md` / `INFERENCE.md` sit in the root next to them; `REPORT.md` (root) is the short project report.
+- `tests/` (pytest; CI: `.github/workflows/tests.yml` runs them on every push, without torch, `data/` tests skip;
+  `tests/test_pipeline.py` runs both scripts end to end with stub transformers and a stub LLM).
 
 Specs: `docs/TRD.md` (decision log §20 — append when a decision changes), `docs/STACKING_ENSEMBLE.md`, `docs/APP_FLOW.md`,
-`docs/IMPLEMENTATION_PLAN.md`, `docs/INFERENCE.md`, `docs/TESTING.md`. The LLM prompt the code reads is
+`docs/IMPLEMENTATION_PLAN.md`; the user guides `INFERENCE.md` and `TESTING.md` sit in the root next to `inference.py` / `test.py`. The LLM prompt the code reads is
 `prompts/stance_system_prompt.md` (`prompt_version: v3`); `docs/LLM_PROMPT.md` is its rationale.
 
 ## Commands
@@ -43,6 +46,8 @@ python -m src.training.run_llm_batch --provider a b --split meta val [--check|--
 python -m src.training.train_inference
 python -m src.training.train_meta
 python -m src.evaluate [--splits val meta]
+python test.py [--inspect] [--no-llm]               # the one data file in test/ -> test/result.txt, predictions.csv
+python inference.py -t "comment" [--no-llm] [--json]
 mlflow ui --backend-store-uri sqlite:///outputs/<component>/metrics/mlflow.db
 ```
 

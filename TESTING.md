@@ -2,7 +2,7 @@
 
 You will get a test file, and you will not know its columns, label spellings or format. `test.py` is built so that you can configure it in about a minute and then get the full comparison.
 
-> Planned interface. The flags and the `TEST_CONFIG` block below are the specification for the code.
+This page sits next to `test.py` in the repository root. If the code and this page ever differ, fix this page on the same day.
 
 ---
 
@@ -71,7 +71,7 @@ Every flag has the same effect as the matching `TEST_CONFIG` entry and overrides
 | `--batch-size N` | Comments per LLM request (default from `LLM_BATCH_SIZE`, normally 50) |
 | `--label-style STYLE` | Prediction labels: `ps` (default: `Favour`, `None`, `Against`), `file` (the spelling the test file uses), `numeric` (`0`, `1`, `2`) |
 | `--device DEVICE` | `auto`, `cpu`, `cuda`, `mps` |
-| `--config PATH` | Another config file |
+| `--config PATH` | Another base config file instead of `configs/base.yaml` |
 | `-v`, `--verbose` / `-q`, `--quiet` | More or less console output |
 | `--version`, `-h`, `--help` | Version, usage |
 
@@ -79,7 +79,7 @@ Exit codes: `0` success, `2` configuration or column error, `3` data error, `4` 
 
 ### Setup and OS notes
 
-Setup is identical to `INFERENCE.md` (virtual environment, `pip install -r requirements.txt`, `.env`). Run `python test.py` on macOS and Linux, `python test.py` or `py -3.13 test.py` on Windows. On Windows set `PYTHONUTF8=1` before running.
+Setup is identical to `INFERENCE.md` (same folder: virtual environment, `pip install -r requirements.txt`, `.env`, and the `models/finetuned/` folders). Run `python test.py` on macOS and Linux, `python test.py` or `py -3.13 test.py` on Windows. On Windows set `PYTHONUTF8=1` before running.
 
 ---
 
@@ -87,7 +87,7 @@ Setup is identical to `INFERENCE.md` (virtual environment, `pip install -r requi
 
 | What the file looks like | What to set |
 |---|---|
-| `ID,Target,Tweet,Stance` with FAVOR / AGAINST / NONE | Nothing; auto-detect handles it |
+| `ID,Target,Tweet,Stance` with FAVOR / AGAINST / NONE | Nothing; auto-detect handles it (`Target` is ignored: the fixed claim is used unless you set `claim_col`) |
 | `id,comment,label` with Favour / Against / None | Nothing |
 | `comment_id,yt_comment,stance` with 0 / 1 / 2 | `--text-col yt_comment --id-col comment_id --label-col stance --label-map "0=favour,1=none,2=against"` (confirm the meaning first) |
 | Only one column of comments, no header | Add `--text-col 0` (a number picks the column by position when there is no header) |
@@ -102,7 +102,7 @@ Setup is identical to `INFERENCE.md` (virtual environment, `pip install -r requi
 
 1. Finds the file, reads it (trying delimiters and encodings), applies your configuration.
 2. Cleans every comment with the same preprocessing used in training.
-3. Runs: majority baseline, TF-IDF baseline, MuRIL, IndicBERT.
+3. Runs: majority baseline, TF-IDF baseline, MuRIL, IndicBERT (one transformer in memory at a time; about 1 minute for 4,000 rows on an M3 Mac). Empty comments are predicted too (so every ID gets a label) but are left out of the metrics and never sent to an LLM.
 4. Sends the comments to LLM-A and LLM-B in batches (answers are cached per comment, so a rerun costs nothing).
 5. Applies the stacked meta-model comment by comment. If an LLM answer is missing, the matching fallback model is used and counted.
 6. If labels exist: computes the metrics, picks the **best single transformer** and the **best single LLM** by Macro-F1 on this file, and compares everything.
@@ -114,9 +114,9 @@ Setup is identical to `INFERENCE.md` (virtual environment, `pip install -r requi
 |---|---|
 | `test/result.txt` | The full report (latest). The previous one is moved to `test/archive/` first |
 | `test/reports/result_<time>.md` | The same report as Markdown, timestamped |
-| `test/predictions.csv` | `ID,Predicted_Label` for every row (previous one archived) |
+| `test/predictions.csv` | `ID,Predicted_Label` for every row (previous one archived). With pandas, read it with `keep_default_na=False`, otherwise the label `None` becomes a missing value |
 | `outputs/test/logs/test_<time>.txt` | Exact command, configuration, per-step log, warnings |
-| `outputs/test/predictions/test_<time>_detailed.csv` | Every component's output per comment |
+| `outputs/test/predictions/test_<time>_detailed.csv` | Every component's output per comment (transformer probabilities, LLM answers, each system's label, meta-model variant, ensemble probabilities) |
 | `outputs/test/metrics/test_<time>.json` | The numbers behind the report |
 
 Nothing is ever overwritten without being kept first. All reports are produced by the script; no AI writes them.
@@ -124,7 +124,7 @@ Nothing is ever overwritten without being kept first. All reports are produced b
 ## 7. Reading `result.txt`
 
 1. **Header:** time, command, file, rows read, rows dropped (empty comments) and why, label counts.
-2. **Comparison table:** Macro-F1 (first), accuracy, weighted-F1, MCC, kappa for: majority, TF-IDF, MuRIL, IndicBERT, best transformer, LLM-A, LLM-B, best LLM, **ensemble**. "Best" is chosen on this same file and the report says so.
+2. **Comparison table:** Macro-F1 (first, with a bootstrap 95% interval), accuracy, weighted-F1, MCC, kappa and per-class F1 for: majority, TF-IDF, MuRIL, IndicBERT, best transformer, LLM-A, LLM-B, best LLM, soft vote, majority vote, **ensemble**. "Best" is chosen on this same file and the report says so. A closing line states whether the ensemble beats the best single system.
 3. **Per-class table:** precision, recall, F1 for Favour, None, Against, for every system.
 4. **Confusion matrices:** rows are true labels, columns are predictions.
 5. **By script group:** Devanagari, Bengali, Latin (Latin covers English and romanised text).
@@ -150,4 +150,4 @@ With no labels, sections 2–5 and 7 are replaced by a prediction summary: label
 
 ## 9. Sources
 
-All models, libraries and datasets are cited in `REFERENCES.md`.
+All models, libraries and datasets are cited in `docs/REFERENCES.md`.

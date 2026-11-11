@@ -129,7 +129,7 @@ Parallel work: LLM requests are limited per day, so start them as early as the p
 | Report sections: comparison, per-class, confusion matrices, by script group, LLM usage, error analysis, explainability, environment, configuration | `result.txt` and `.md` |
 | Run `test.py` on SemEval (copy it into `test/` as a stand-in evaluator file) | First full comparison |
 | Try odd files: renamed columns, TSV, XLSX, numeric labels, no labels, no claim column, one with Latin-only text | Passing checks |
-| `inference.py`: one comment and file modes, flags from `INFERENCE.md` | Working CLI |
+| `inference.py`: one comment and file modes, flags from `INFERENCE.md` (repo root) | Working CLI |
 
 **Delivers:** the headline comparison and both entry points.
 
@@ -151,7 +151,7 @@ Parallel work: LLM requests are limited per day, so start them as early as the p
 | Task | Output |
 |---|---|
 | README (setup on macOS, Linux, Windows; run each stage; limitations; machine-translation note; every source cited) | README |
-| Check `INFERENCE.md`, `TESTING.md` and `REFERENCES.md` against the real code and flags; fix differences | Matching docs |
+| Check `INFERENCE.md`, `TESTING.md` (repo root) and `REFERENCES.md` against the real code and flags; fix differences | Matching docs |
 | Add the name of the translation LLM and the two classification LLMs to `REFERENCES.md` | Complete citations |
 | Dry run as the evaluator: fresh clone, fresh environment, README only, a surprise test file | Verified instructions |
 | Run at least once on macOS and once on Linux (Colab shell counts); follow the Windows steps in `INFERENCE.md` if a Windows machine is available | OS check |

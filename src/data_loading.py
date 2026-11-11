@@ -56,15 +56,17 @@ def _read_text(p: Path, encoding: str | None) -> tuple[str, str]:
     raise LoaderError(f"Could not decode {p} with any of {ENCODINGS}")
 
 
-def read_table(p: str | Path, delimiter: str | None = None, encoding: str | None = None) -> tuple[pd.DataFrame, LoadInfo]:
-    """Read a file by extension into a DataFrame of strings (no column mapping yet)."""
+def read_table(p: str | Path, delimiter: str | None = None, encoding: str | None = None,
+               header: bool = True) -> tuple[pd.DataFrame, LoadInfo]:
+    """Read a file by extension into a DataFrame of strings (no column mapping yet).
+    header=False: the first row is data and the columns are named "0", "1", ... (picked by position)."""
     p = Path(p)
     info = LoadInfo(path=str(p))
     if not p.exists():
         raise LoaderError(f"File not found: {p}")
     ext = p.suffix.lower()
     if ext in (".xlsx", ".xls"):
-        df = pd.read_excel(p, dtype=str)
+        df = pd.read_excel(p, dtype=str, header=0 if header else None)
     else:
         text, info.encoding = _read_text(p, encoding)
         if ext == ".jsonl":
@@ -77,7 +79,7 @@ def read_table(p: str | Path, delimiter: str | None = None, encoding: str | None
                     obj = records[0]
             df = pd.DataFrame(obj)
         elif ext == ".txt" and delimiter is None:
-            df = pd.DataFrame({"comment": [l for l in text.splitlines() if l.strip()]})
+            df = pd.DataFrame({"comment" if header else "0": [l for l in text.splitlines() if l.strip()]})
         else:
             if delimiter is None:
                 if ext == ".tsv":
@@ -88,7 +90,10 @@ def read_table(p: str | Path, delimiter: str | None = None, encoding: str | None
                     except csv.Error:
                         delimiter = ","
             info.delimiter = delimiter
-            df = pd.read_csv(io.StringIO(text), sep=delimiter, dtype=str, keep_default_na=False)
+            df = pd.read_csv(io.StringIO(text), sep=delimiter, dtype=str, keep_default_na=False,
+                             header=0 if header else None)
+    if not header:
+        df.columns = [str(i) for i in range(df.shape[1])]
     df = df.astype(object).where(df.notna(), None)
     info.columns_found = [str(c) for c in df.columns]
     return df, info
@@ -130,14 +135,22 @@ def normalise_label(value, label_map: dict[str, str] | None = None) -> str | Non
 
 def load_file(p: str | Path, *, id_col=None, text_col=None, label_col=None, claim_col=None, language_col=None,
               label_map: dict | None = None, delimiter=None, encoding=None, fixed_claim: str | None = None,
-              allow_unknown_labels: bool = False, dataset: str = "evaluator") -> tuple[pd.DataFrame, LoadInfo]:
-    """Load + map + preprocess one file. Raises LoaderError / LabelError with a readable message."""
+              allow_unknown_labels: bool = False, dataset: str = "evaluator",
+              detect_claim: bool = True) -> tuple[pd.DataFrame, LoadInfo]:
+    """Load + map + preprocess one file. Raises LoaderError / LabelError with a readable message.
+    detect_claim=False: a claim column is used only when claim_col names it (test.py / inference.py: SemEval's
+    `Target` column must not replace the fixed claim)."""
     raw, info = read_table(p, delimiter, encoding)
     cols = list(raw.columns)
+    overrides = [c for c in (id_col, text_col, label_col, claim_col, language_col) if c is not None]
+    if any(str(c).strip().isdigit() and _norm(c) not in {_norm(x) for x in cols} for c in overrides):
+        raw, info = read_table(p, delimiter, encoding, header=False)    # a number = column position, no header row
+        info.warnings.append("column given by position: the file is read without a header row")
+        cols = list(raw.columns)
     m = {
         "id": find_column(cols, "id", id_col),
         "comment": find_column(cols, "comment", text_col),
-        "claim": find_column(cols, "claim", claim_col),
+        "claim": find_column(cols, "claim", claim_col) if (detect_claim or claim_col) else None,
         "label": find_column(cols, "label", label_col),
         "language": find_column(cols, "language", language_col),
     }
@@ -153,6 +166,7 @@ def load_file(p: str | Path, *, id_col=None, text_col=None, label_col=None, clai
     out["language"] = raw[m["language"]].astype(str) if m["language"] else None
     out["variant"] = None
     out["comment_raw"] = raw[m["comment"]]
+    out["label_raw"] = raw[m["label"]].astype(str).str.strip() if m["label"] else None
     out["comment"] = [preprocess(t) for t in raw[m["comment"]]]
     claim_text = fixed_claim or FIXED_CLAIM
     out["claim"] = [preprocess(c) if c else claim_text for c in raw[m["claim"]]] if m["claim"] else claim_text
@@ -164,8 +178,10 @@ def load_file(p: str | Path, *, id_col=None, text_col=None, label_col=None, clai
         unknown = pd.Series([str(v) for v, n in zip(raw[m["label"]], names) if n is None]).value_counts()
         info.unknown_labels = {str(k): int(v) for k, v in unknown.items()}
         if info.unknown_labels and not allow_unknown_labels:
-            raise LabelError(f"Unknown label values in {p}: {info.unknown_labels}. Add them to label_map "
+            err = LabelError(f"Unknown label values in {p}: {info.unknown_labels}. Add them to label_map "
                              f"or pass --allow-unknown-labels to score those rows as unlabeled.")
+            err.unknown = info.unknown_labels
+            raise err
         out["label_name"] = names
         out["label"] = pd.array([L2I[n] if n else pd.NA for n in names], dtype="Int64")
         info.has_labels = out["label"].notna().any()

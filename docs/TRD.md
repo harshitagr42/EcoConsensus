@@ -2,7 +2,7 @@
 
 **Project:** EcoConsensus
 **Version:** v2
-**Companions:** `PRD.md`, `APP_FLOW.md`, `STACKING_ENSEMBLE.md`, `INFERENCE.md`, `TESTING.md`, `LLM_PROMPT.md`, `REFERENCES.md`
+**Companions:** `PRD.md`, `APP_FLOW.md`, `STACKING_ENSEMBLE.md`, `../INFERENCE.md`, `../TESTING.md` (repo root), `LLM_PROMPT.md`, `REFERENCES.md`
 
 Decided once, written down. Any change after sign-off goes in the decision log (section 20).
 
@@ -72,13 +72,16 @@ EcoConsensus/
 ├── requirements.txt
 ├── requirements-train.txt
 ├── inference.py                  # one comment or a file
+├── INFERENCE.md                  # user guide for inference.py
 ├── test.py                       # evaluator test runner (reads test/)
+├── TESTING.md                    # evaluator-day guide for test.py
+├── REPORT.md                     # short project report
 ├── configs/
 │   ├── base.yaml                 # paths, seed, labels, fixed claim, aliases, noise list
 │   ├── transformers.yaml         # models, LoRA settings, training settings
 │   └── llm.yaml                  # providers, batch size, budgets, prompt version
 ├── docs/                         # PRD, TRD, APP_FLOW, IMPLEMENTATION_PLAN, STACKING_ENSEMBLE,
-│                                 # INFERENCE, TESTING, LLM_PROMPT, REFERENCES
+│                                 # LLM_PROMPT, REFERENCES
 ├── data/
 │   ├── raw/
 │   │   ├── original/             # pol_nli_data/, SemEval_2016_Task6/ (as they are now)
@@ -302,7 +305,7 @@ Features per comment (12 numbers): MuRIL 3 probabilities, IndicBERT 3 probabilit
 
 ## 13. `test.py`
 
-Behaviour in short (details in `TESTING.md`):
+Behaviour in short (details in `TESTING.md`, repo root):
 - Lives in the repo root, reads `test/`, writes into `test/` and `outputs/`.
 - A `TEST_CONFIG` block at the top holds: `data_file`, `id_col`, `text_col`, `label_col`, `claim_col`, `language_col`, `label_map`, `delimiter`, `encoding`, `fixed_claim`, `use_llm`, `llm_budget`. Command-line flags override it. `--inspect` prints columns, sample rows and distinct label values without running any model.
 - Runs every component, picks the **best single transformer** and **best single LLM** by Macro-F1 on the same file (shown in the report), and applies the stacked ensemble with automatic fallback per row.
@@ -311,7 +314,7 @@ Behaviour in short (details in `TESTING.md`):
 
 ## 14. `inference.py`
 
-Behaviour in short (details in `INFERENCE.md`): one comment by default, or a file; one request per LLM; component selection with `--mode`; same loader, preprocessing and meta-models as `test.py`.
+Behaviour in short (details in `INFERENCE.md`, repo root): one comment by default, or a file; one request per LLM; component selection with `--mode`; same loader, preprocessing and meta-models as `test.py`.
 
 ## 15. Experiment tracking (MLflow)
 
@@ -387,3 +390,6 @@ On the Mac, small and fast (`tests/`):
 | 27 | LLM cache fill and meta-model training run on the Mac (Colab only if memory runs out) | Meta-model is a small logistic regression |
 | 28 | Outputs are grouped by component: `outputs/<component>/{logs,metrics,predictions,reports}/` for `prepare_data`, `baselines`, `muril`, `indicbert`, `llm`, `ensemble`, `evaluate`, `inference`, `test`; one MLflow DB per component; LLM cache in `outputs/llm/cache/`. The notebooks' results zip uses the same layout | User decision (2026-11-11): each model's files in one place |
 | 29 | `src/evaluate.py` scores every available system (baselines, transformers, LLMs from cache, soft/majority vote, stacked) on `val`, `meta`, `semeval_test` and writes a report; `stacked` is not scored on `meta` (in-sample). No requests, no tuning | User request: one command for the metrics of every model |
+| 30 | `test.py` and `inference.py` share `src/pipeline.py` (load models, run components, per-row meta-model fallback, TF-IDF when no variant applies). Transformers are loaded one at a time (base model from the Hub + LoRA adapter); LLM answers are cached as in training. Their guides `TESTING.md` and `INFERENCE.md` moved from `docs/` to the repo root, next to the scripts | User decision (2026-11-11): each guide beside its script |
+| 31 | In `test.py` / `inference.py` a claim column is used only when named (`claim_col` / `--claim-col`); SemEval's `Target` is ignored. Numeric labels are never mapped by default; empty comments are predicted but not scored and never sent to an LLM | Fixed claim is what the models learned; `0/1/2` is ambiguous |
+| 32 | The final system stays the four-component stacked ensemble (`meta_all4` with fallbacks); no component is removed, although LLM-A alone scored higher on `semeval_test` (0.779 vs 0.650) | User decision (2026-11-11); choosing on the test split would be leakage; reported plainly in `REPORT.md` |

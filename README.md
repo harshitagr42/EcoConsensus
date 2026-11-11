@@ -10,7 +10,7 @@ Stance detection on global warming for Hindi and Bengali comments (CSET 346 NLP 
 | Experiment (`experiment/prepare_data.py`, `experiment/experiment.ipynb`) | Done on Colab; LoRA chosen for both models |
 | Data, baselines, LLM layer, stacking scripts (`src/`, `src/training/`) | Written (Days 1–3); runbook in `src/training/README.md` |
 | MuRIL and IndicBERT (LoRA) | Trained on Colab (2026-11-10); scored with `python -m src.evaluate` |
-| `test.py`, `inference.py` | Not written yet (Day 4) |
+| `test.py`, `inference.py` (`src/pipeline.py`) | Written (Day 4); guides `TESTING.md`, `INFERENCE.md` |
 
 ## Where to start
 
@@ -20,8 +20,10 @@ Stance detection on global warming for Hindi and Bengali comments (CSET 346 NLP 
 | Understand the requirements | `docs/PRD.md`, `docs/TRD.md` |
 | See how everything connects | `docs/APP_FLOW.md` |
 | See the plan and day-by-day sign-offs | `docs/IMPLEMENTATION_PLAN.md` |
-| See how the ensemble is built and trained | `docs/STACKING.md` |
-| Run `inference.py` or `test.py` on macOS, Linux or Windows | `docs/INFERENCE.md` |
+| See how the ensemble is built and trained | `docs/STACKING_ENSEMBLE.md` |
+| Run `inference.py` on macOS, Linux or Windows | `INFERENCE.md` (root) |
+| Score a test file with `test.py` | `TESTING.md` (root) |
+| Read the project report (approach, assumptions, metrics, limitations) | `REPORT.md` (root) |
 | Use the LLM prompt | `prompts/stance_system_prompt.md` |
 
 ## Repository layout
@@ -77,7 +79,7 @@ Copy `.env.example` to `.env` and fill in the two LLM providers' details. `.env`
 3. Final training on Colab: MuRIL and IndicBERT **in parallel on two accounts** (`src/training/train_<model>.ipynb`); unzip each `<model>_results.zip` in the project root. Meanwhile `run_llm_batch.py` fills the LLM cache on the Mac.
 4. `train_inference.py` joins both transformers' probabilities and both LLMs' cached answers into feature tables; `train_meta.py` trains the meta-model.
 5. `python -m src.evaluate` scores every model and writes a report to `outputs/evaluate/`.
-6. `test.py` evaluates a dataset placed in `test/`; `inference.py` classifies single comments (Day 4).
+6. `test.py` evaluates a dataset placed in `test/` (`TESTING.md`); `inference.py` classifies one comment or a file (`INFERENCE.md`).
 
 ## Data
 
@@ -133,8 +135,8 @@ Bibliographic details marked (checked) were confirmed against the model or datas
 | Purpose | Provider and company | Model and version | Date used |
 |---|---|---|---|
 | Translation to Hindi and Bengali | _fill in_ | _fill in_ | _fill in_ |
-| Stance classification, LLM A | _fill in_ | _fill in_ | _fill in_ |
-| Stance classification, LLM B | _fill in_ | _fill in_ | _fill in_ |
+| Stance classification, LLM A | Google, Gemini API (OpenAI-compatible endpoint) | `gemini-3.5-flash-lite`, prompt `v3`, zero-shot | November 2026 |
+| Stance classification, LLM B | OpenAI open-weight model served by Groq | `openai/gpt-oss-20b` (reasoning effort low), prompt `v3`, zero-shot | November 2026 |
 | Documentation and code drafting | Anthropic, Claude | Claude Sonnet 5.5 | November 2026 |
 
 Reference papers kept in `papers/` are listed in the technical report, not here.

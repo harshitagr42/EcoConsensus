@@ -3,7 +3,7 @@
 **Project:** EcoConsensus — Stance Detection in Media on Global Warming for Indic Languages (CSET 346, NLP)
 **Version:** v2 (replaces the v1 draft; updated for the professor's PS, `test.py`, the new datasets and the experiment results)
 **Timeline:** about 5 days (Mon 9 Nov – Fri 13 Nov 2026). The PS lists all dates as "to be announced", so shift the plan if the real dates differ.
-**Companions:** `TRD.md`, `APP_FLOW.md`, `IMPLEMENTATION_PLAN.md`, `STACKING_ENSEMBLE.md`, `INFERENCE.md`, `TESTING.md`, `LLM_PROMPT.md`, `REFERENCES.md`
+**Companions:** `TRD.md`, `APP_FLOW.md`, `IMPLEMENTATION_PLAN.md`, `STACKING_ENSEMBLE.md`, `../INFERENCE.md`, `../TESTING.md` (repo root), `LLM_PROMPT.md`, `REFERENCES.md`
 
 If a feature is not in section 4, it is not in the build.
 
@@ -173,12 +173,12 @@ Each feature lists who it is for, what it does, and what counts as done.
 
 ### F12. `inference.py`
 - **For:** evaluator, builder
-- **What:** Classifies one comment (default) or a file. Full usage in `INFERENCE.md`.
+- **What:** Classifies one comment (default) or a file. Full usage in `INFERENCE.md` (repo root).
 - **Done when:** it prints the final label and each component's vote, writes a timestamped log, needs no training code or MLflow, sends exactly one comment to each LLM, and gives a clear message for every failure listed in `APP_FLOW.md`.
 
 ### F13. `test.py` (evaluator test runner)
 - **For:** evaluator, builder
-- **What:** Runs everything on the file in `test/` and writes the full comparison. Full guide in `TESTING.md`.
+- **What:** Runs everything on the file in `test/` and writes the full comparison. Full guide in `TESTING.md` (repo root).
 - **Done when:**
   - It finds the single data file in `test/`, or takes `--file`.
   - A `TEST_CONFIG` block at the top of `test.py` (and matching command-line flags) lets you set column names, label spellings, delimiter and claim handling in a minute, with `--inspect` showing the file's columns, sample rows and distinct label values first.

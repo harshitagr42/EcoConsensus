@@ -108,9 +108,11 @@ def write_json(p: Path, obj, overwrite: bool = True) -> Path:
 LIBRARY_LOGGERS = ("llm_api",)
 
 
-def get_logger(run_type: str, component: str | None = None, log_dir: Path | None = None) -> logging.Logger:
+def get_logger(run_type: str, component: str | None = None, log_dir: Path | None = None,
+               console_level: int = logging.INFO, stream=None) -> logging.Logger:
     """Console + `outputs/<component>/logs/<run_type>_<YYYYMMDD_HHMMSS>.txt` (component defaults to run_type).
-    The command line is logged first."""
+    The command line is logged first. The file always gets INFO and above; the console gets `console_level` and above
+    on `stream` (default stdout; inference.py uses stderr so its printed result stays clean)."""
     from src.config import out_path
     log_dir = Path(log_dir) if log_dir else out_path(component or run_type, "logs", create=True)
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -120,8 +122,9 @@ def get_logger(run_type: str, component: str | None = None, log_dir: Path | None
     logger.setLevel(logging.INFO)
     logger.propagate = False
     fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s", "%H:%M:%S")
-    sh = logging.StreamHandler(sys.stdout)
+    sh = logging.StreamHandler(stream or sys.stdout)
     sh.setFormatter(fmt)
+    sh.setLevel(console_level)
     logger.addHandler(sh)
     log_file = unique_path(log_dir / f"{run_type}.txt")
     fh = logging.FileHandler(log_file, encoding="utf-8")

@@ -2,7 +2,7 @@
 
 **Project:** EcoConsensus
 **Version:** v2
-**Companions:** `PRD.md`, `TRD.md`, `STACKING_ENSEMBLE.md`, `INFERENCE.md`, `TESTING.md`
+**Companions:** `PRD.md`, `TRD.md`, `STACKING_ENSEMBLE.md`, `../INFERENCE.md`, `../TESTING.md` (repo root)
 
 There is no UI, so the "screens" are scripts and notebooks and the "clicks" are commands. For each step: what goes in, what happens, what comes next, and where you land when it fails.
 

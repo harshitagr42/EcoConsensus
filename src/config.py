@@ -18,6 +18,10 @@ CONFIG_DIR = ROOT / "configs"
 
 def _load_yaml(name: str) -> dict:
     p = CONFIG_DIR / name
+    if name == "base.yaml" and os.environ.get("ECOCONSENSUS_CONFIG"):    # test.py / inference.py --config PATH
+        p = Path(os.environ["ECOCONSENSUS_CONFIG"]).expanduser().resolve()
+        if not p.exists():
+            raise FileNotFoundError(f"config file not found: {p}")
     return yaml.safe_load(p.read_text(encoding="utf-8")) if p.exists() else {}
 
 
