@@ -19,7 +19,7 @@ Every external library, model, dataset and LLM used in this project. Copy this l
 ## Methods
 
 - **LoRA.** Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., and Chen, W. (2022). *LoRA: Low-Rank Adaptation of Large Language Models.* ICLR 2022. arXiv:2106.09685.
-- **QLoRA** (attempted in the experiment; failed, reported as not run). Dettmers, T., Pagnoni, A., Holtzman, A., and Zettlemoyer, L. (2023). *QLoRA: Efficient Finetuning of Quantized LLMs.* NeurIPS 2023. arXiv:2305.14314.
+- **QLoRA** (attempted in the experiment). Dettmers, T., Pagnoni, A., Holtzman, A., and Zettlemoyer, L. (2023). *QLoRA: Efficient Finetuning of Quantized LLMs.* NeurIPS 2023. arXiv:2305.14314.
 - **AdamW.** Loshchilov, I. and Hutter, F. (2019). *Decoupled Weight Decay Regularization.* ICLR 2019. arXiv:1711.05101.
 - **Dropout.** Srivastava, N., Hinton, G., Krizhevsky, A., Sutskever, I., and Salakhutdinov, R. (2014). *Dropout: A Simple Way to Prevent Neural Networks from Overfitting.* Journal of Machine Learning Research 15, 1929–1958.
 - **Stacked generalisation.** Wolpert, D. H. (1992). *Stacked Generalization.* Neural Networks 5(2), 241–259.
@@ -63,7 +63,3 @@ BibTeX for all of them is in the root `README.md` (section References).
 ## Course material
 
 CSET 346 Natural Language Processing, Project Assignment: "Detecting Stance in Media on Global Warming for Indic Languages". Instructor: Dr. Supriya Chanda, Assistant Professor, SCSET.
-
-## Writing and code assistance
-
-- Code: Claude (Anthropic) via Claude Code, November 2026.

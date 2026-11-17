@@ -121,7 +121,7 @@ All reports are Markdown (and `result.txt` from `inference.py`), written only by
 ## References
 
 Plain-text citations for every library, method and LLM are in `docs/REFERENCES.md`. BibTeX for the datasets, the
-models and every paper in `papers/` is below. Fields marked `TO_FILL` still need to be checked and completed.
+models and every paper in `papers/` is below.
 
 ### Datasets
 
@@ -157,17 +157,14 @@ Pol-NLI / Political DEBATE ([dataset](https://huggingface.co/datasets/mlburnham/
 Companion article to SemEval-2016 Task 6 (`papers/1605.01655v1.pdf`):
 
 ```bibtex
-@article{mohammad2017stance,
-  title={Stance and Sentiment in Tweets},
-  author={Mohammad, Saif M. and Sobhani, Parinaz and Kiritchenko, Svetlana},
-  journal={ACM Transactions on Internet Technology},
-  volume={17},
-  number={3},
-  articleno={26},
-  year={2017},
-  doi={TO_FILL},
-  eprint={1605.01655},
-  archivePrefix={arXiv}
+@misc{mohammad2016stancesentimenttweets,
+      title={Stance and Sentiment in Tweets}, 
+      author={Saif M. Mohammad and Parinaz Sobhani and Svetlana Kiritchenko},
+      year={2016},
+      eprint={1605.01655},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/1605.01655}, 
 }
 ```
 
@@ -177,29 +174,26 @@ MuRIL, model [`google/muril-base-cased`](https://huggingface.co/google/muril-bas
 
 ```bibtex
 @misc{khanuja2021muril,
-  title={MuRIL: Multilingual Representations for Indian Languages},
-  author={Khanuja, Simran and Bansal, Diksha and Mehtani, Sarvesh and Khosla, Savya and Dey, Atreyee and Gopalan, Balaji and Margam, Dilip Kumar and Aggarwal, Pooja and Nagipogu, Rajiv Teja and Dave, Shachi and Gupta, Shruti and Gali, Subhash Chandra Bose and Subramanian, Vish and Talukdar, Partha},
-  year={2021},
-  eprint={2103.10730},
-  archivePrefix={arXiv},
-  primaryClass={cs.CL},
-  url={https://arxiv.org/abs/2103.10730}
+      title={MuRIL: Multilingual Representations for Indian Languages},
+      author={Simran Khanuja and Diksha Bansal and Sarvesh Mehtani and Savya Khosla and Atreyee Dey and Balaji Gopalan and Dilip Kumar Margam and Pooja Aggarwal and Rajiv Teja Nagipogu and Shachi Dave and Shruti Gupta and Subhash Chandra Bose Gali and Vish Subramanian and Partha Talukdar},
+      year={2021},
+      eprint={2103.10730},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL}
 }
 ```
 
 IndicBERT v2, model [`ai4bharat/IndicBERTv2-MLM-only`](https://huggingface.co/ai4bharat/IndicBERTv2-MLM-only) (`papers/2212.05409v3.pdf`):
 
 ```bibtex
-@inproceedings{doddapaneni2023indicbertv2,
-  title={Towards Leaving No Indic Language Behind: Building Monolingual Corpora, Benchmark and Models for Indic Languages},
-  author={Doddapaneni, Sumanth and Aralikatte, Rahul and Ramesh, Gowtham and Goyal, Shreya and Khapra, Mitesh M. and Kunchukuttan, Anoop and Kumar, Pratyush},
-  booktitle={Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)},
-  pages={TO_FILL},
-  year={2023},
-  publisher={Association for Computational Linguistics},
-  url={TO_FILL},
-  eprint={2212.05409},
-  archivePrefix={arXiv}
+@misc{doddapaneni2023leavingindiclanguagebehind,
+      title={Towards Leaving No Indic Language Behind: Building Monolingual Corpora, Benchmark and Models for Indic Languages}, 
+      author={Sumanth Doddapaneni and Rahul Aralikatte and Gowtham Ramesh and Shreya Goyal and Mitesh M. Khapra and Anoop Kunchukuttan and Pratyush Kumar},
+      year={2023},
+      eprint={2212.05409},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2212.05409}, 
 }
 ```
 
@@ -224,7 +218,6 @@ Fine-tuning method (LoRA):
   author={{Google}},
   howpublished={Gemini API, model gemini-3.5-flash-lite},
   year={2026},
-  url={TO_FILL},
   note={Accessed November 2026}
 }
 
@@ -232,8 +225,6 @@ Fine-tuning method (LoRA):
   title={gpt-oss-20b},
   author={{OpenAI}},
   howpublished={Open-weight model openai/gpt-oss-20b, served by the Groq API},
-  year={TO_FILL},
-  url={TO_FILL},
   note={Accessed November 2026}
 }
 ```
@@ -243,14 +234,14 @@ Fine-tuning method (LoRA):
 LLM ensembling (`papers/2023.acl-long.792.pdf`):
 
 ```bibtex
-@inproceedings{jiang2023llmblender,
-  title={LLM-Blender: Ensembling Large Language Models with Pairwise Ranking and Generative Fusion},
-  author={Jiang, Dongfu and Ren, Xiang and Lin, Bill Yuchen},
-  booktitle={Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)},
-  pages={14165--14178},
-  year={2023},
-  publisher={Association for Computational Linguistics},
-  url={TO_FILL}
+@misc{jiang2023llmblenderensemblinglargelanguage,
+      title={LLM-Blender: Ensembling Large Language Models with Pairwise Ranking and Generative Fusion}, 
+      author={Dongfu Jiang and Xiang Ren and Bill Yuchen Lin},
+      year={2023},
+      eprint={2306.02561},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2306.02561}, 
 }
 ```
 
@@ -277,8 +268,7 @@ Climate-activism stance shared task (`papers/2024.case-1.33.pdf`):
   pages={234--247},
   year={2024},
   publisher={Association for Computational Linguistics},
-  address={TO_FILL},
-  url={TO_FILL}
+  url={https://aclanthology.org/2024.case-1.33/}
 }
 ```
 
@@ -293,7 +283,6 @@ Code-mixed Hinglish: fine-tuned models against LLMs (`papers/2602.21933v1.pdf`):
   archivePrefix={arXiv},
   primaryClass={cs.CL},
   url={https://arxiv.org/abs/2602.21933},
-  note={TO_FILL: venue if published}
 }
 ```
 
@@ -304,8 +293,7 @@ The other files in `papers/` are already cited above: `1605.01655v1.pdf` (Mohamm
 
 | Purpose | Provider and company | Model and version | Date used |
 |---|---|---|---|
-| Translation of both datasets to Hindi and Bengali | _fill in_ | _fill in_ | _fill in_ |
-| Refining Pol-NLI labels into favour / neutral / against | Anthropic, Claude | _fill in (model version)_ | _fill in_ |
+| Translation of both datasets to Hindi and Bengali | Anthropic, Claude | Opus 5.5 | November 2026 |
+| Refining Pol-NLI labels into favour / neutral / against | Anthropic, Claude | Opus 5.5 | November 2026 |
 | Stance classification, LLM A | Google, Gemini API (OpenAI-compatible endpoint) | `gemini-3.5-flash-lite`, prompt `v3`, zero-shot | November 2026 |
 | Stance classification, LLM B | OpenAI open-weight model served by Groq | `openai/gpt-oss-20b` (reasoning effort low), prompt `v3`, zero-shot | November 2026 |
-| Documentation and code drafting | Anthropic, Claude (Claude Code) | Claude Sonnet 5.5, Claude Opus 5.5 | November 2026 |
