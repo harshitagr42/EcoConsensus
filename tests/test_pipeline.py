@@ -125,6 +125,37 @@ def test_pipeline_all_components_and_fallback(tmp_path, evaluator_file):
                         llm_factory=stub_factory(tmp_path, missing=("a",)))
 
 
+def test_llms_run_at_the_same_time(tmp_path):
+    """Each stub reply waits until the other LLM is also mid-request; run one after the other, this would time out."""
+    import threading
+    barrier = threading.Barrier(2, timeout=10)
+
+    class MeetingLLM(StubLLM):
+        def chat(self, system, user, max_tokens):
+            barrier.wait()
+            return super().chat(system, user, max_tokens)
+
+    def make(slot, claim, batch_size, max_requests):
+        return LLMComponent(slot, client=MeetingLLM(), cache_dir=tmp_path / f"cache_{slot}", batch_size=2,
+                            sleep=lambda s: None)
+
+    df = pl.rows_from_texts(["global warming is a hoax", "climate change is serious", "pasta", "more hoax"])
+    res = pl.run_pipeline(df, fake_models(), ["llm_a", "llm_b"], llm_factory=make)
+    for c in ("llm_a", "llm_b"):
+        assert res.llm_info[c]["status"] == "ok" and res.llm_info[c]["answered"] == 4
+        assert list(res.preds[c]) == [2, 0, 1, 2]
+
+
+def test_cancel_stops_an_llm_like_ctrl_c(tmp_path):
+    import threading
+    comp = LLMComponent("a", client=StubLLM(), cache_dir=tmp_path / "cache", batch_size=2, sleep=lambda s: None)
+    comp.cancel = threading.Event()
+    comp.cancel.set()
+    out = comp.run(["global warming is a hoax", "pasta"])
+    assert comp.interrupted and comp.client.calls == 0
+    assert all(r["status"] == "missing" for r in out)
+
+
 def test_final_prediction_modes(tmp_path):
     df = pl.rows_from_texts(["global warming is a hoax"])
     res = pl.run_pipeline(df, fake_models(), ["llm_a"], llm_factory=stub_factory(tmp_path, missing=("a",)))

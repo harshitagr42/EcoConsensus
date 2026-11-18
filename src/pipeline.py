@@ -14,6 +14,7 @@ import gc
 import json
 import logging
 import os
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -267,8 +268,34 @@ def make_llm(slot: str, claim: str, batch_size: int | None, max_requests: int | 
     return LLMComponent(slot, prompt=prompt, batch_size=batch_size, max_requests=max_requests)
 
 
+def run_llms_parallel(names: list[str], df: pd.DataFrame, batch_size: int | None = None,
+                      max_requests: int | None = None, log=None, factory=None) -> dict[str, tuple[list, dict]]:
+    """llm_labels for each LLM component at the same time, one thread each, so one provider's rate-limit waits do not
+    hold up the other. Safe because each provider has its own cache file, usage counter and HTTP session.
+    Ctrl+C reaches only the main thread: it sets a shared event that stops both workers at their next request or
+    wait (answers so far are cached), then KeyboardInterrupt is raised here as in a sequential run."""
+    if len(names) <= 1:
+        return {c: llm_labels(c[-1], df, batch_size, max_requests, log, factory) for c in names}
+    from concurrent.futures import ThreadPoolExecutor
+    cancel = threading.Event()
+    pool = ThreadPoolExecutor(max_workers=len(names), thread_name_prefix="llm")
+    futures = {c: pool.submit(llm_labels, c[-1], df, batch_size, max_requests, log, factory, cancel) for c in names}
+    try:
+        return {c: f.result() for c, f in futures.items()}
+    except KeyboardInterrupt:
+        cancel.set()
+        if log:
+            log.warning("Ctrl+C: stopping both LLMs (a request already sent is allowed to finish; answers are cached)")
+        raise
+    except BaseException:
+        cancel.set()                          # one LLM raised: stop the other instead of letting it run on
+        raise
+    finally:
+        pool.shutdown(wait=True)
+
+
 def llm_labels(slot: str, df: pd.DataFrame, batch_size: int | None = None, max_requests: int | None = None,
-               log=None, factory=None) -> tuple[list[int | None], dict]:
+               log=None, factory=None, cancel: threading.Event | None = None) -> tuple[list[int | None], dict]:
     """Label id per row (None = no answer) and a usage summary. Empty comments are never sent.
     Answers come from the cache first; the rest are sent in batches (inference.py -t uses batch size 1)."""
     from src.llm_api import FatalProviderError
@@ -286,6 +313,8 @@ def llm_labels(slot: str, df: pd.DataFrame, batch_size: int | None = None, max_r
             if log:
                 log.warning("LLM-%s unavailable: %s", slot.upper(), e)
             return labels, info
+        if cancel is not None:
+            comp.cancel = cancel
         res = comp.run(df["comment"].iloc[idx].tolist(), claim=claim, progress_every=5)
         for i, r in zip(idx, res):
             labels[i] = r["label"] if r["status"] == "ok" else None
@@ -329,15 +358,18 @@ def run_pipeline(df: pd.DataFrame, models: Models, components: list[str], *, dev
     for c in TRANSFORMERS:
         add_transformer(table, c, probs.get(c))
     llm_info = {}
-    for c in LLMS:
+    results = run_llms_parallel([c for c in LLMS if c in components], df, llm_batch_size, llm_budget, log,
+                                llm_factory)
+    for c in LLMS:                                               # fixed order, whichever LLM finished first
         if c in components:
-            labels, llm_info[c] = llm_labels(c[-1], df, llm_batch_size, llm_budget, log, llm_factory)
+            labels, llm_info[c] = results[c]
             add_llm(table, c, labels)
-            if require_llm and llm_info[c]["unavailable"] + (llm_info[c]["status"] == "not configured") > 0:
-                raise LLMRequired(f"{DISPLAY[c]} unavailable ({llm_info[c]['status']}: "
-                                  f"{llm_info[c]['stopped'] or str(llm_info[c]['unavailable']) + ' rows without an answer'})")
         else:
             add_llm(table, c, None)
+    for c in llm_info:
+        if require_llm and llm_info[c]["unavailable"] + (llm_info[c]["status"] == "not configured") > 0:
+            raise LLMRequired(f"{DISPLAY[c]} unavailable ({llm_info[c]['status']}: "
+                              f"{llm_info[c]['stopped'] or str(llm_info[c]['unavailable']) + ' rows without an answer'})")
 
     texts = pair_text(df)
     preds = {"majority": np.asarray(models.majority.predict(texts), dtype=int),

@@ -15,6 +15,7 @@ import hashlib
 import json
 import logging
 import re
+import threading
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -227,6 +228,17 @@ def _slug(s: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", str(s)).strip("-")
 
 
+_FILE_LOCKS: dict[Path, threading.Lock] = {}
+_FILE_LOCKS_GUARD = threading.Lock()
+
+
+def _file_lock(p: Path) -> threading.Lock:
+    """One lock per cache/usage file, shared by every component in this process. LLM-A and LLM-B run in parallel
+    threads and use the same files when they are set to the same provider and model."""
+    with _FILE_LOCKS_GUARD:
+        return _FILE_LOCKS.setdefault(Path(p).resolve(), threading.Lock())
+
+
 class LLMCache:
     """Append-only JSONL. The last record for a key wins (so a later 'ok' replaces an 'unavailable')."""
 
@@ -250,7 +262,7 @@ class LLMCache:
     def put_many(self, items: list[tuple[str, int | None, str]]) -> None:
         """items: (key, label id or None, status)."""
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        with open(self.path, "a", encoding="utf-8") as f:
+        with _file_lock(self.path), open(self.path, "a", encoding="utf-8") as f:
             for key, label, status in items:
                 r = dict(key=key, label=LABELS[label] if label is not None else None, status=status,
                          timestamp=now, **self.meta)
@@ -282,8 +294,11 @@ class BudgetGuard:
 
     def record(self, n: int = 1) -> None:
         k = date.today().isoformat()
-        self.usage[k] = int(self.usage.get(k, 0)) + n
-        write_json(self.path, self.usage)
+        with _file_lock(self.path):            # re-read: another component may share this file (same provider/model)
+            if self.path.exists():
+                self.usage = json.loads(self.path.read_text(encoding="utf-8"))
+            self.usage[k] = int(self.usage.get(k, 0)) + n
+            write_json(self.path, self.usage)
 
 
 # ---------------------------------------------------------------- HTTP client
@@ -477,6 +492,7 @@ class LLMComponent:
         self.last_problem: str | None = None
         self.stopped: str | None = None           # reason if the run stopped early
         self.interrupted = False                  # Ctrl+C: answers so far are cached, the caller stops
+        self.cancel: threading.Event | None = None  # set by the caller (another thread) to stop like Ctrl+C
         self._empty_streak = 0
         self._partial: dict[str, int | None] = {}
 
@@ -490,6 +506,21 @@ class LLMComponent:
         base = LLM_CFG.get("max_tokens_per_comment", 20) * n + LLM_CFG.get("max_tokens_extra", 50)
         return int(min(LLM_CFG.get("max_tokens_cap", 8192), base + self.reasoning_tokens))
 
+    def _check_cancel(self) -> None:
+        """Ctrl+C reaches only the main thread; when this component runs in a worker thread, the main thread sets
+        `cancel` and the worker stops here as if it had been interrupted (answers so far are cached)."""
+        if self.cancel is not None and self.cancel.is_set():
+            raise KeyboardInterrupt
+
+    def _wait(self, seconds: float) -> None:
+        """self.sleep, but woken early (and stopped) when `cancel` is set."""
+        self._check_cancel()
+        if self.cancel is not None and self.sleep is time.sleep:
+            self.cancel.wait(seconds)
+        else:
+            self.sleep(seconds)
+        self._check_cancel()
+
     def _pace(self) -> None:
         """Wait for the tokens-per-minute window when the last reply said too few tokens are left for another
         request of the same size. Avoids sending requests that would only come back as 429."""
@@ -499,7 +530,7 @@ class LLMComponent:
         log.info("%s: %d tokens left in this minute, the next request needs ~%d; waiting %.0fs", self.name,
                  self._tokens_left, self._last_cost, wait)
         self.stats["rate_limit_waits"] += 1
-        self.sleep(wait)
+        self._wait(wait)
         self._tokens_left = None
 
     def _ask(self, comments: list[str]) -> dict[int, int]:
@@ -514,6 +545,7 @@ class LLMComponent:
         while True:
             max_tokens = self._max_tokens(len(comments))
             self._pace()
+            self._check_cancel()
             try:
                 self.budget.record()
                 self.stats["requests"] += 1
@@ -558,7 +590,7 @@ class LLMComponent:
                                               category=e.category) from None
                 wait = min(65.0, (e.retry_after or 10.0) + 0.5)
                 log.info("%s: %s; waiting %.1fs. (%s)", self.name, e.category, wait, e)
-                self.sleep(wait)
+                self._wait(wait)
                 self._tokens_left = None
                 self.budget.check()
             except TransientError as e:
@@ -572,7 +604,7 @@ class LLMComponent:
                                             LLM_CFG.get("backoff_base_sec", 2) * 2 ** (attempt - 1))
                 log.warning("%s: %s — %s; retry %d/%d in %.0fs", self.name, e.category, e, attempt,
                             LLM_CFG.get("max_retries", 5), wait)
-                self.sleep(wait)
+                self._wait(wait)
                 self.budget.check()
             except TokenLimitError as e:
                 self.budget.record(-1)            # rejected before any work
@@ -603,7 +635,7 @@ class LLMComponent:
                 if self.batch_size > self.min_batch:
                     self.batch_size = max(self.min_batch, self.batch_size // 2)
                     log.warning("%s: %s — %s; batch size -> %d", self.name, e.category, e, self.batch_size)
-                self.sleep(e.retry_after or 20)
+                self._wait(e.retry_after or 20)
                 if len(batch) == 1:
                     if retried:
                         out[batch[0][0]] = None
