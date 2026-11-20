@@ -2,7 +2,7 @@
 reply validation and repair, per-comment append-only cache, daily budget guard, retries and token-limit backoff.
 
 Configuration: .env (LLM_A_*, LLM_B_*, LLM_BATCH_SIZE) + configs/llm.yaml + prompts/stance_system_prompt.md.
-Several keys per slot (e.g. two free accounts): LLM_A_API_KEYS=key1,key2 (instead of LLM_A_API_KEY); the pipeline
+Several keys per slot (e.g. two free accounts): LLM_A_API_KEY_1, LLM_A_API_KEY_2 (or LLM_A_API_KEYS=key1,key2); the pipeline
 moves to the next key when one stops on its daily quota or an auth error (src/pipeline.py llm_labels).
 
     comp = LLMComponent("a")
@@ -128,11 +128,21 @@ class ProviderConfig:
 
 
 def api_keys(slot: str) -> list[str]:
-    """LLM_<S>_API_KEYS (comma-separated) if set, else [LLM_<S>_API_KEY], else []. Keys are never logged."""
+    """The keys of one LLM slot, in the order they are used. Keys are never logged. First that is set:
+    LLM_<S>_API_KEYS (comma-separated), LLM_<S>_API_KEY_1, _2, ... (numbered, from 1, stops at the first gap),
+    LLM_<S>_API_KEY."""
     s = f"LLM_{slot.upper()}_"
     many = [k.strip() for k in (env(s + "API_KEYS") or "").split(",") if k.strip()]
+    if many:
+        return many
+    numbered, i = [], 1
+    while env(f"{s}API_KEY_{i}"):
+        numbered.append(env(f"{s}API_KEY_{i}").strip())
+        i += 1
+    if numbered:
+        return numbered
     one = env(s + "API_KEY")
-    return many or ([one] if one else [])
+    return [one] if one else []
 
 
 def default_batch_size() -> int:

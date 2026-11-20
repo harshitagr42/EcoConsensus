@@ -25,12 +25,15 @@ Browser ─► EcoConsensus.harshitagr42.com     Cloudflare Pages, serves web/ o
    pip install -r requirements.txt          # adds fastapi, uvicorn, huggingface_hub
    hf auth login                            # paste the token
    ```
-3. Put both keys of each LLM in `.env` (comma-separated, no spaces needed):
+3. Put both keys of each LLM in `.env`, numbered from 1 (used in this order):
    ```
-   LLM_A_API_KEYS=gemini_key_account1,gemini_key_account2
-   LLM_B_API_KEYS=groq_key_account1,groq_key_account2
+   LLM_A_API_KEY_1=gemini_key_account1
+   LLM_A_API_KEY_2=gemini_key_account2
+   LLM_B_API_KEY_1=groq_key_account1
+   LLM_B_API_KEY_2=groq_key_account2
    ```
-   `LLM_A_API_KEY` (one key) still works when `LLM_A_API_KEYS` is not set. `LLM_<S>_DAILY_LIMIT` applies per key.
+   Also accepted: `LLM_A_API_KEYS=key1,key2`, or a single `LLM_A_API_KEY`. `LLM_<S>_DAILY_LIMIT` applies per key.
+   `secrets` (step 6) sends them to the Space as one secret per LLM, `LLM_A_API_KEYS` / `LLM_B_API_KEYS`.
 4. Upload the weights (public model repo `<you>/ecoconsensus-weights`):
    ```bash
    python scripts/hf_space.py weights

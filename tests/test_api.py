@@ -152,3 +152,16 @@ def test_llm_switches_to_second_key_on_daily_quota(tmp_path, monkeypatch):
     # each key has its own daily counter
     assert (tmp_path / "usage__stub__m__key2.json").exists() and (tmp_path / "usage__stub__m.json").exists()
     json.loads((tmp_path / "usage__stub__m__key2.json").read_text())
+
+
+def test_numbered_keys(monkeypatch):
+    from src.llm_api import api_keys
+    for k in ("API_KEYS", "API_KEY", "API_KEY_1", "API_KEY_2", "API_KEY_3"):
+        monkeypatch.delenv(f"LLM_A_{k}", raising=False)
+    monkeypatch.setenv("LLM_A_API_KEY", "single")
+    assert api_keys("a") == ["single"]
+    monkeypatch.setenv("LLM_A_API_KEY_1", "k1")
+    monkeypatch.setenv("LLM_A_API_KEY_2", "k2")
+    assert api_keys("a") == ["k1", "k2"]                 # numbered keys win over the single one
+    monkeypatch.setenv("LLM_A_API_KEYS", "x,y")
+    assert api_keys("a") == ["x", "y"]

@@ -34,7 +34,7 @@ Phase 1 (experiment, `experiment/`) is done: LoRA chosen for both models. Phase 
   `api/` = FastAPI backend for a Hugging Face Space (`app.py` routes, `jobs.py` uploads/limits/queue/job runner,
   `settings.py` limits, `weights.py` downloads the separate HF weights repo at image build); `scripts/hf_space.py`
   uploads weights, deploys an explicit file list, sets secrets, pauses/restarts. Limits are enforced in `api/` only.
-  Several keys per LLM: `LLM_<S>_API_KEYS=k1,k2` (next key on daily quota / auth error). Weights never go to GitHub.
+  Several keys per LLM: `LLM_<S>_API_KEY_1`, `_2` (or `LLM_<S>_API_KEYS=k1,k2`) (next key on daily quota / auth error). Weights never go to GitHub.
 
 Specs: `docs/TRD.md` (decision log §20 — append when a decision changes), `docs/STACKING_ENSEMBLE.md`, `docs/APP_FLOW.md`,
 `docs/IMPLEMENTATION_PLAN.md`; the user guide `INFERENCE.md` sits in the root next to `inference.py`. The LLM prompt the code reads is
