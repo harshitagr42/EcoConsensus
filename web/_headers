@@ -1,0 +1,6 @@
+# Cloudflare Pages response headers for every page of the site.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.hf.space http://localhost:7860 http://127.0.0.1:7860; frame-ancestors 'none'; base-uri 'self'

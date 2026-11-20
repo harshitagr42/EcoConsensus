@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EcoConsensus</title>
+  <meta name="description" content="Stance detection for Hindi and Bengali comments about climate change.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main>
+  <header class="top">
+    <div>
+      <h1>EcoConsensus</h1>
+      <p class="sub">Stance of Hindi / Bengali comments toward
+        <q id="claim">Climate change and global warming is a serious concern.</q></p>
+    </div>
+    <div id="status" class="pill pill-wait" role="status">Checking backend…</div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <section class="card" id="limits-card">
+    <h2>Before you upload</h2>
+    <ul id="limits" class="limits"><li>Loading limits…</li></ul>
+    <p class="muted small" id="limits-note"></p>
+  </section>
+
+  <!-- 1. upload -->
+  <section class="card" id="step-upload">
+    <h2><span class="num">1</span> Upload a CSV file</h2>
+    <label class="drop" id="drop">
+      <input type="file" id="file" accept=".csv,text/csv">
+      <span id="drop-text">Choose a CSV file or drop it here</span>
+    </label>
+    <p class="muted small">Needed: one column with the comments. Optional: a column with the true stance (for metrics),
+      a claim column, an ID column. You confirm every column and label value in the next step.</p>
+  </section>
+
+  <!-- 2. mapping -->
+  <section class="card" id="step-map" hidden>
+    <h2><span class="num">2</span> Check what is mapped to what</h2>
+    <p class="muted" id="file-info"></p>
+    <h3>First rows of your file</h3>
+    <div class="scroll"><table id="preview" class="grid small"></table></div>
+
+    <h3>Columns</h3>
+    <table class="grid map" id="colmap">
+      <thead><tr><th>What we need</th><th>Column in your file</th><th>Notes</th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <div id="labels-block" hidden>
+      <h3>Stance values</h3>
+      <div class="note">
+        <strong>Our convention:</strong> <code>0 = favour</code>, <code>1 = neutral (None)</code>, <code>2 = against</code>.
+        Your file may use other values (or the same numbers with another meaning). Tell us what each value in your file
+        means, so the metrics compare like with like. Numbers are never guessed.
+      </div>
+      <table class="grid map" id="labelmap">
+        <thead><tr><th>Value in your file</th><th>Rows</th><th>Means</th><th>Our id</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <ul id="label-msgs" class="msgs"></ul>
+    </div>
+
+    <h3>Prediction format</h3>
+    <select id="style"></select>
+    <p class="muted small" id="style-note"></p>
+
+    <div class="summary" id="plan"></div>
+    <div class="actions">
+      <button class="btn" id="run" disabled>Run prediction</button>
+      <button class="btn ghost" id="reset1">Choose another file</button>
+    </div>
+    <p class="err" id="map-error" hidden></p>
+  </section>
+
+  <!-- 3. progress -->
+  <section class="card" id="step-run" hidden>
+    <h2><span class="num">3</span> Processing <span class="muted" id="run-file"></span></h2>
+    <p id="queue" class="muted" hidden></p>
+    <ol id="stages" class="stages"></ol>
+    <ul id="run-warnings" class="msgs warn"></ul>
+    <p class="err" id="run-error" hidden></p>
+    <p class="muted small">You can keep this tab open; it updates by itself. Results are kept on the server for
+      <span class="ttl">6</span> hours.</p>
+  </section>
+
+  <!-- 4. results -->
+  <section class="card" id="step-results" hidden>
+    <h2><span class="num">4</span> Results</h2>
+    <div class="stats" id="stats"></div>
+    <div id="downloads" class="downloads"></div>
+
+    <div id="metrics-block" hidden>
+      <h3>Metrics <span class="muted small">(Macro-F1 is the main metric)</span></h3>
+      <div class="scroll"><table class="grid" id="metrics"></table></div>
+      <p class="muted small">Coverage below 100 % means a system had no answer for some rows (for example an LLM out of
+        quota); those rows are left out of its score. CI = bootstrap 95 % interval.</p>
+      <h3>Confusion matrix — final ensemble</h3>
+      <div class="scroll"><table class="grid conf" id="confusion"></table></div>
+    </div>
+    <div id="dist-block" hidden>
+      <h3>Predicted labels per model</h3>
+      <div class="scroll"><table class="grid" id="dist"></table></div>
+    </div>
+
+    <h3>Mapping used</h3>
+    <div id="used" class="small"></div>
+
+    <h3>First 50 predictions by each model</h3>
+    <div class="scroll tall"><table class="grid small" id="preds"></table></div>
+
+    <details class="report">
+      <summary>Full report</summary>
+      <pre id="report"></pre>
+    </details>
+    <div class="actions"><button class="btn ghost" id="reset2">Start with a new file</button></div>
+  </section>
+
+  <footer class="muted small">
+    EcoConsensus · MuRIL + IndicBERT v2 (LoRA) + two LLMs → stacked logistic-regression ensemble.
+    Uploaded files are processed on the server and deleted after a few hours.
+  </footer>
+</main>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

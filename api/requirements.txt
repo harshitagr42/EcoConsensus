@@ -1,0 +1,15 @@
+# Hugging Face Space runtime (CPU). torch is installed first from the CPU index in the Dockerfile.
+# scikit-learn must stay the version that pickled models/finetuned/{meta,baselines}/*.joblib.
+numpy>=2.0
+pandas==3.1.1
+scikit-learn==1.9.1
+pyyaml>=6.0
+python-dotenv>=1.0
+requests>=2.31
+joblib>=1.4
+transformers==5.22.2
+peft==0.21.2
+huggingface_hub
+fastapi>=0.115
+uvicorn>=0.30
+python-multipart>=0.0.9

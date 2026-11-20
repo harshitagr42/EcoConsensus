@@ -222,8 +222,9 @@ def build_report(df, res, models, cfg, args, data_path, info, llm_used: list[str
     rep.add("Data summary", md_table([{"script_group": g, "rows": int(n)} for g, n in
                                       df["script_group"].value_counts().items()]))
 
+    # a system that answered no row (an LLM not configured or out of quota) has nothing to score
     systems = [s for s in ["majority", "tfidf_lr", *TRANSFORMERS, *LLMS, "soft_vote", "majority_vote", "stacked"]
-               if s in res.preds]
+               if s in res.preds and (res.preds[s] >= 0).any()]
     metrics_out = {}
     if has_labels:
         y_all = df["label"].astype("Float64").to_numpy(dtype=float, na_value=np.nan)
@@ -358,16 +359,18 @@ def evaluation_table(metrics_out: dict):
     import pandas as pd
     from src.config import LABELS
     from src.pipeline import DISPLAY
+    def r4(v):                                   # undefined metrics (e.g. kappa when one class only) stay empty
+        return None if v is None else round(v, 4)
     rows = []
     for s, m in metrics_out.items():
         b = m.get("bootstrap") or {}
-        row = dict(system=DISPLAY[s], key=s, n=m["n"], coverage=round(m["coverage"], 4),
-                   macro_f1=round(m["macro_f1"], 4), ci95_low=round(b["low"], 4) if b else None,
-                   ci95_high=round(b["high"], 4) if b else None, accuracy=round(m["accuracy"], 4),
-                   weighted_f1=round(m["weighted_f1"], 4), mcc=round(m["mcc"], 4), kappa=round(m["kappa"], 4))
+        row = dict(system=DISPLAY[s], key=s, n=m["n"], coverage=r4(m["coverage"]),
+                   macro_f1=r4(m["macro_f1"]), ci95_low=r4(b.get("low")), ci95_high=r4(b.get("high")),
+                   accuracy=r4(m["accuracy"]), weighted_f1=r4(m["weighted_f1"]), mcc=r4(m["mcc"]),
+                   kappa=r4(m["kappa"]))
         for c in LABELS:
             for k in ("precision", "recall", "f1"):
-                row[f"{k}_{c}"] = round(m["per_class"][c][k], 4)
+                row[f"{k}_{c}"] = r4(m["per_class"][c][k])
         rows.append(row)
     return pd.DataFrame(rows).sort_values("macro_f1", ascending=False, kind="stable")
 
@@ -530,7 +533,10 @@ def _print_one(args, df, res, log, log_file) -> int:
     return 0
 
 
-def _write_file_results(args, cfg, df, info, res, models, data_path, out_root, log, log_file) -> int:
+def _write_file_results(args, cfg, df, info, res, models, data_path, out_root, log, log_file,
+                        file_map: dict[int, str] | None = None) -> int:
+    """file_map: label id -> output spelling for --label-style file (the web API passes the user's own mapping);
+    default: the most common spelling of each class in the file's label column."""
     import numpy as np
     import pandas as pd
     from src.ensembling import LLMS, TRANSFORMERS
@@ -548,7 +554,7 @@ def _write_file_results(args, cfg, df, info, res, models, data_path, out_root, l
     rep, metrics_out = build_report(df, res, models, cfg, args, data_path, info, llm_used, source)
     text = rep.render()
 
-    file_map = file_label_spelling(df) if args.label_style == "file" else None
+    file_map = (file_map or file_label_spelling(df)) if args.label_style == "file" else None
     if args.label_style == "file" and not file_map:
         log.warning("--label-style file: the file has no labels; writing Favour / None / Against instead")
     final = format_labels(pred, args.label_style, file_map)

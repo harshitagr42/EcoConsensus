@@ -262,24 +262,26 @@ def transformer_probs(names: list[str], df: pd.DataFrame, device: str = "auto", 
 
 
 # ---------------------------------------------------------------- LLMs
-def make_llm(slot: str, claim: str, batch_size: int | None, max_requests: int | None):
+def make_llm(slot: str, claim: str, batch_size: int | None, max_requests: int | None, key_index: int = 0):
     from src.llm_api import LLMComponent, few_shot_from_config, load_prompt
     prompt = None if claim == FIXED_CLAIM else load_prompt(claim=claim, few_shot=few_shot_from_config())
-    return LLMComponent(slot, prompt=prompt, batch_size=batch_size, max_requests=max_requests)
+    return LLMComponent(slot, prompt=prompt, batch_size=batch_size, max_requests=max_requests, key_index=key_index)
 
 
 def run_llms_parallel(names: list[str], df: pd.DataFrame, batch_size: int | None = None,
-                      max_requests: int | None = None, log=None, factory=None) -> dict[str, tuple[list, dict]]:
+                      max_requests: int | None = None, log=None, factory=None,
+                      progress=None) -> dict[str, tuple[list, dict]]:
     """llm_labels for each LLM component at the same time, one thread each, so one provider's rate-limit waits do not
     hold up the other. Safe because each provider has its own cache file, usage counter and HTTP session.
     Ctrl+C reaches only the main thread: it sets a shared event that stops both workers at their next request or
     wait (answers so far are cached), then KeyboardInterrupt is raised here as in a sequential run."""
     if len(names) <= 1:
-        return {c: llm_labels(c[-1], df, batch_size, max_requests, log, factory) for c in names}
+        return {c: llm_labels(c[-1], df, batch_size, max_requests, log, factory, progress=progress) for c in names}
     from concurrent.futures import ThreadPoolExecutor
     cancel = threading.Event()
     pool = ThreadPoolExecutor(max_workers=len(names), thread_name_prefix="llm")
-    futures = {c: pool.submit(llm_labels, c[-1], df, batch_size, max_requests, log, factory, cancel) for c in names}
+    futures = {c: pool.submit(llm_labels, c[-1], df, batch_size, max_requests, log, factory, cancel, progress)
+               for c in names}
     try:
         return {c: f.result() for c, f in futures.items()}
     except KeyboardInterrupt:
@@ -295,44 +297,82 @@ def run_llms_parallel(names: list[str], df: pd.DataFrame, batch_size: int | None
 
 
 def llm_labels(slot: str, df: pd.DataFrame, batch_size: int | None = None, max_requests: int | None = None,
-               log=None, factory=None, cancel: threading.Event | None = None) -> tuple[list[int | None], dict]:
+               log=None, factory=None, cancel: threading.Event | None = None,
+               progress=None) -> tuple[list[int | None], dict]:
     """Label id per row (None = no answer) and a usage summary. Empty comments are never sent.
-    Answers come from the cache first; the rest are sent in batches (inference.py -t uses batch size 1)."""
-    from src.llm_api import FatalProviderError
+    Answers come from the cache first; the rest are sent in batches (inference.py -t uses batch size 1).
+    With several keys (LLM_<S>_API_KEYS), a key that stops on its daily quota or an auth error is replaced by the next
+    one and the same comments are sent again (the answered ones come from the cache).
+    progress: optional callback(event: dict) for the web API (key switches, rows done)."""
+    from src.llm_api import FatalProviderError, api_keys
     factory = factory or make_llm
+    name = f"llm_{slot}"
     labels: list[int | None] = [None] * len(df)
-    info = dict(component=f"llm_{slot}", status="ok", requests=0, cache_hits=0, answered=0, unavailable=0,
-                parse_failures=0, stopped=None, provider=None, model=None, prompt_version=None, errors={})
+    info = dict(component=name, status="ok", requests=0, cache_hits=0, answered=0, unavailable=0,
+                parse_failures=0, stopped=None, provider=None, model=None, prompt_version=None, errors={},
+                keys=max(1, len(api_keys(slot))), key_used=1, key_switches=[])
     send = ~df["empty"].to_numpy(dtype=bool)
+    total = int(send.sum())
+    done_before = 0                                   # rows of earlier claims (progress across claims)
+
+    def emit(**ev):
+        if progress:
+            progress(dict(component=name, **ev))
     for claim in pd.unique(df.loc[send, "claim"]):
         idx = np.flatnonzero(send & (df["claim"] == claim).to_numpy())
-        try:
-            comp = factory(slot, claim, batch_size, max_requests)
-        except (FatalProviderError, ValueError) as e:
-            info.update(status="not configured", stopped=str(e))
-            if log:
-                log.warning("LLM-%s unavailable: %s", slot.upper(), e)
-            return labels, info
-        if cancel is not None:
-            comp.cancel = cancel
-        res = comp.run(df["comment"].iloc[idx].tolist(), claim=claim, progress_every=5)
-        for i, r in zip(idx, res):
-            labels[i] = r["label"] if r["status"] == "ok" else None
-        st = comp.stats
-        for k in ("requests", "cache_hits", "parse_failures"):
-            info[k] += st.get(k, 0)
-        for k, v in st.get("errors", {}).items():
-            info["errors"][k] = info["errors"].get(k, 0) + v
-        info.update(provider=comp.cfg.provider, model=comp.cfg.model, prompt_version=comp.prompt.version)
-        if comp.stopped:
-            info.update(status="stopped", stopped=comp.stopped)
-            if comp.interrupted:
-                raise KeyboardInterrupt
+        key, first = info["key_used"] - 1, True
+        while True:
+            try:
+                comp = factory(slot, claim, batch_size, max_requests) if key == 0 else \
+                    factory(slot, claim, batch_size, max_requests, key_index=key)
+            except (FatalProviderError, ValueError) as e:
+                info.update(status="not configured", stopped=str(e))
+                if log:
+                    log.warning("LLM-%s unavailable: %s", slot.upper(), e)
+                return labels, info
+            if cancel is not None:
+                comp.cancel = cancel
+            if progress:
+                cached = len(idx) - sum(comp.cache.get(_ck(claim, c)) is None for c in df["comment"].iloc[idx])
+                comp.on_progress = (lambda d, t, base=done_before + cached:
+                                    emit(event="rows", done=base + d, total=total))
+                emit(event="rows", done=done_before + cached, total=total)
+            res = comp.run(df["comment"].iloc[idx].tolist(), claim=claim, progress_every=5)
+            for i, r in zip(idx, res):
+                labels[i] = r["label"] if r["status"] == "ok" else None
+            st = comp.stats
+            for k in ("requests", "parse_failures") + (("cache_hits",) if first else ()):
+                info[k] += st.get(k, 0)
+            for k, v in st.get("errors", {}).items():
+                info["errors"][k] = info["errors"].get(k, 0) + v
+            info.update(provider=comp.cfg.provider, model=comp.cfg.model, prompt_version=comp.prompt.version)
+            if comp.stopped:
+                info.update(status="stopped", stopped=comp.stopped)
+                if comp.interrupted:
+                    raise KeyboardInterrupt
+                left = sum(labels[i] is None for i in idx)
+                if comp.stop_kind in ("quota", "fatal") and left and key + 1 < info["keys"]:
+                    msg = f"key {key + 1} stopped ({comp.stopped.split(':')[0]}); switching to key {key + 2}"
+                    info["key_switches"].append(msg)
+                    if log:
+                        log.warning("LLM-%s: %s", slot.upper(), msg)
+                    emit(event="key_switch", message=msg)
+                    key, first = key + 1, False
+                    info.update(key_used=key + 1, status="ok", stopped=None)
+                    continue
+            break
+        done_before += len(idx)
     info["answered"] = sum(l is not None for l in labels)
     info["unavailable"] = int(send.sum()) - info["answered"]
     if info["status"] == "ok" and info["unavailable"]:
         info["status"] = "partial"
+    emit(event="done", answered=info["answered"], total=total, status=info["status"], stopped=info["stopped"])
     return labels, info
+
+
+def _ck(claim: str, comment: str) -> str:
+    from src.llm_api import cache_key
+    return cache_key(claim, comment)
 
 
 # ---------------------------------------------------------------- the run
@@ -347,19 +387,32 @@ class PipelineResult:
 
 def run_pipeline(df: pd.DataFrame, models: Models, components: list[str], *, device: str = "auto",
                  llm_batch_size: int | None = None, llm_budget: int | None = None, require_llm: bool = False,
-                 log=None, transformer_fn=None, llm_factory=None) -> PipelineResult:
+                 log=None, transformer_fn=None, llm_factory=None, progress=None) -> PipelineResult:
     """Run the requested components on preprocessed rows and combine them. Baselines always run (cheap); the stacked
-    model runs when meta-models are loaded. Raises LLMRequired when require_llm and an LLM left rows unanswered."""
+    model runs when meta-models are loaded. Raises LLMRequired when require_llm and an LLM left rows unanswered.
+    progress: optional callback(event: dict) with {"component", "event": "start"/"done"/"rows"/"key_switch", ...}
+    (the web API shows it as stages)."""
     transformer_fn = transformer_fn or transformer_probs          # looked up at call time (tests replace them)
     llm_factory = llm_factory or make_llm
+
+    def emit(component, event, **kw):
+        if progress:
+            progress(dict(component=component, event=event, **kw))
     table = pd.DataFrame(index=range(len(df)))
     tr = [c for c in TRANSFORMERS if c in components]
-    probs = transformer_fn(tr, df, device, log) if tr else {}
+    probs = {}
+    for c in tr:                                                   # one model in memory at a time
+        emit(c, "start", total=len(df))
+        probs.update(transformer_fn([c], df, device, log))
+        emit(c, "done", total=len(df))
     for c in TRANSFORMERS:
         add_transformer(table, c, probs.get(c))
     llm_info = {}
+    for c in LLMS:
+        if c in components:
+            emit(c, "start", total=int((~df["empty"].to_numpy(dtype=bool)).sum()))
     results = run_llms_parallel([c for c in LLMS if c in components], df, llm_batch_size, llm_budget, log,
-                                llm_factory)
+                                llm_factory, progress)
     for c in LLMS:                                               # fixed order, whichever LLM finished first
         if c in components:
             labels, llm_info[c] = results[c]
@@ -382,12 +435,14 @@ def run_pipeline(df: pd.DataFrame, models: Models, components: list[str], *, dev
         if any(c in components for c in LLMS):
             preds["majority_vote"] = majority_vote(table)
     variant, stacked_probs = np.full(len(df), None, dtype=object), None
+    emit("meta", "start", total=len(df))
     if models.meta and all(c in components for c in TRANSFORMERS):
         p, stacked_probs, variant = predict_with_fallback(table, models.meta)
         no_variant = p < 0
         p = np.where(no_variant, preds["tfidf_lr"], p)
         variant = np.where(no_variant, "tfidf_lr fallback", variant)
         preds["stacked"] = p.astype(int)
+    emit("meta", "done", total=len(df))
     return PipelineResult(table, preds, variant, stacked_probs, llm_info)
 
 

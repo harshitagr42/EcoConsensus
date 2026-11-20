@@ -30,6 +30,12 @@ Phase 1 (experiment, `experiment/`) is done: LoRA chosen for both models. Phase 
 - `tests/` (pytest; CI: `.github/workflows/tests.yml` runs them on every push, without torch, `data/` tests skip;
   `tests/test_pipeline.py` runs `inference.py` end to end (one comment and a file) with stub transformers and a stub LLM).
 
+- Deployment (guide `docs/DEPLOYMENT.md`): `web/` = static site for Cloudflare Pages (only `config.js` holds the API URL);
+  `api/` = FastAPI backend for a Hugging Face Space (`app.py` routes, `jobs.py` uploads/limits/queue/job runner,
+  `settings.py` limits, `weights.py` downloads the separate HF weights repo at image build); `scripts/hf_space.py`
+  uploads weights, deploys an explicit file list, sets secrets, pauses/restarts. Limits are enforced in `api/` only.
+  Several keys per LLM: `LLM_<S>_API_KEYS=k1,k2` (next key on daily quota / auth error). Weights never go to GitHub.
+
 Specs: `docs/TRD.md` (decision log §20 — append when a decision changes), `docs/STACKING_ENSEMBLE.md`, `docs/APP_FLOW.md`,
 `docs/IMPLEMENTATION_PLAN.md`; the user guide `INFERENCE.md` sits in the root next to `inference.py`. The LLM prompt the code reads is
 `prompts/stance_system_prompt.md` (`prompt_version: v3`); `docs/LLM_PROMPT.md` is its rationale.

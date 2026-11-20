@@ -2,6 +2,8 @@
 reply validation and repair, per-comment append-only cache, daily budget guard, retries and token-limit backoff.
 
 Configuration: .env (LLM_A_*, LLM_B_*, LLM_BATCH_SIZE) + configs/llm.yaml + prompts/stance_system_prompt.md.
+Several keys per slot (e.g. two free accounts): LLM_A_API_KEYS=key1,key2 (instead of LLM_A_API_KEY); the pipeline
+moves to the next key when one stops on its daily quota or an auth error (src/pipeline.py llm_labels).
 
     comp = LLMComponent("a")
     results = comp.run(comments)          # list of {"label": 0/1/2 or None, "status": ..., "cached": bool}
@@ -91,9 +93,15 @@ class ProviderConfig:
     daily_limit: int | None
     extra_body: dict | None = None  # LLM_<S>_EXTRA_BODY (JSON), e.g. {"reasoning_effort": "low"}
 
+    key_index: int = 0              # which of LLM_<S>_API_KEYS (0 = the first, or LLM_<S>_API_KEY)
+
     @classmethod
-    def from_env(cls, slot: str) -> "ProviderConfig":
+    def from_env(cls, slot: str, key_index: int = 0) -> "ProviderConfig":
         s = f"LLM_{slot.upper()}_"
+        keys = api_keys(slot)
+        if key_index >= max(1, len(keys)):
+            raise FatalProviderError(f"{s}API_KEYS has {len(keys)} key(s); key {key_index + 1} does not exist",
+                                     category="CONFIG ERROR (your side)")
         lim = env(s + "DAILY_LIMIT")
         extra = env(s + "EXTRA_BODY")
         try:
@@ -102,8 +110,8 @@ class ProviderConfig:
             raise FatalProviderError(f"{s}EXTRA_BODY in .env is not valid JSON ({e}): {extra!r}",
                                      category="CONFIG ERROR (your side)") from None
         return cls(slot=slot.lower(), provider=env(s + "PROVIDER"), model=env(s + "MODEL"),
-                   api_key=env(s + "API_KEY"), base_url=env(s + "BASE_URL"),
-                   daily_limit=int(lim) if lim else None, extra_body=extra_body)
+                   api_key=keys[key_index] if keys else None, base_url=env(s + "BASE_URL"),
+                   daily_limit=int(lim) if lim else None, extra_body=extra_body, key_index=key_index)
 
     @property
     def name(self) -> str:                         # component name used in features and reports
@@ -117,6 +125,14 @@ class ProviderConfig:
         return f"ProviderConfig(slot={self.slot}, provider={self.provider}, model={self.model}, " \
                f"base_url={self.base_url}, daily_limit={self.daily_limit}" + \
                (f", extra_body={self.extra_body})" if self.extra_body else ")")
+
+
+def api_keys(slot: str) -> list[str]:
+    """LLM_<S>_API_KEYS (comma-separated) if set, else [LLM_<S>_API_KEY], else []. Keys are never logged."""
+    s = f"LLM_{slot.upper()}_"
+    many = [k.strip() for k in (env(s + "API_KEYS") or "").split(",") if k.strip()]
+    one = env(s + "API_KEY")
+    return many or ([one] if one else [])
 
 
 def default_batch_size() -> int:
@@ -274,9 +290,12 @@ class LLMCache:
 class BudgetGuard:
     """Counts requests per provider/model per (local) day in outputs/llm/cache/usage__<provider>__<model>.json."""
 
-    def __init__(self, provider: str, model: str, daily_limit: int | None, cache_dir: Path | None = None):
+    def __init__(self, provider: str, model: str, daily_limit: int | None, cache_dir: Path | None = None,
+                 key_index: int = 0):
+        """Each API key has its own counter (key 1 keeps the original file name)."""
         d = Path(cache_dir) if cache_dir else path("cache", create=True)
-        self.path = d / f"usage__{_slug(provider)}__{_slug(model)}.json"
+        suffix = f"__key{key_index + 1}" if key_index else ""
+        self.path = d / f"usage__{_slug(provider)}__{_slug(model)}{suffix}.json"
         self.limit = daily_limit
         self.usage = json.loads(self.path.read_text(encoding="utf-8")) if self.path.exists() else {}
 
@@ -464,9 +483,10 @@ class LLMComponent:
 
     def __init__(self, slot: str, prompt: Prompt | None = None, batch_size: int | None = None,
                  client=None, cache_dir: Path | None = None, sleep=time.sleep, max_requests: int | None = None,
-                 lookup_only: bool = False):
-        """lookup_only: only PROVIDER and MODEL are needed (to find the cache file); no request can be sent."""
-        self.cfg = ProviderConfig.from_env(slot)
+                 lookup_only: bool = False, key_index: int = 0):
+        """lookup_only: only PROVIDER and MODEL are needed (to find the cache file); no request can be sent.
+        key_index: which of LLM_<S>_API_KEYS to use (the cache is shared by all keys of a provider/model)."""
+        self.cfg = ProviderConfig.from_env(slot, key_index)
         if lookup_only:
             if not (self.cfg.provider and self.cfg.model):
                 raise FatalProviderError(f"{self.cfg.name}: set LLM_{slot.upper()}_PROVIDER and _MODEL in .env "
@@ -480,7 +500,7 @@ class LLMComponent:
         self.client = client or OpenAICompatibleClient(self.cfg)
         provider, model = self.cfg.provider or "stub", self.cfg.model or "stub"
         self.cache = LLMCache(provider, model, self.prompt.version, cache_dir)
-        self.budget = BudgetGuard(provider, model, self.cfg.daily_limit, cache_dir)
+        self.budget = BudgetGuard(provider, model, self.cfg.daily_limit, cache_dir, key_index)
         self.sleep = sleep
         self.max_requests = max_requests          # optional cap for this run (on top of the daily budget)
         self.stats = dict(requests=0, cache_hits=0, sent=0, ok=0, unavailable=0, parse_failures=0,
@@ -491,6 +511,10 @@ class LLMComponent:
         self._last_cost: int | None = None        # prompt + max_tokens of the last accepted request
         self.last_problem: str | None = None
         self.stopped: str | None = None           # reason if the run stopped early
+        # why: "quota" (daily quota / budget), "cap" (max_requests), "fatal" (auth, model, URL), "unavailable",
+        # "interrupted". "quota" and "fatal" are worth retrying with another API key.
+        self.stop_kind: str | None = None
+        self.on_progress = None                   # optional callback(done, total) after each batch (web API)
         self.interrupted = False                  # Ctrl+C: answers so far are cached, the caller stops
         self.cancel: threading.Event | None = None  # set by the caller (another thread) to stop like Ctrl+C
         self._empty_streak = 0
@@ -707,8 +731,11 @@ class LLMComponent:
                     if isinstance(e, KeyboardInterrupt):
                         self.interrupted = True
                         self.stopped = "INTERRUPTED (Ctrl+C)"
+                        self.stop_kind = "interrupted"
                     else:
                         self.stopped = f"{e.category}: {e}"
+                        self.stop_kind = ("cap" if str(e.category).startswith("RUN CAP") else
+                                          "quota" if isinstance(e, DailyLimitReached) else "unavailable")
                     break
                 self.cache.put_many([(r["id"], r["label"], r["status"]) for r in res])
                 self.stats["sent"] += len(batch)
@@ -716,6 +743,8 @@ class LLMComponent:
                 self.stats["unavailable"] += sum(r["status"] != STATUS_OK for r in res)
                 i += len(batch)
                 n_batches += 1
+                if self.on_progress:
+                    self.on_progress(i, len(todo))
                 if progress_every and n_batches % progress_every == 0:
                     log.info("%s: %d/%d new comments done (batch %d, requests %d, rate-limit waits %d, today %d%s)",
                              self.name, i, len(todo), self.batch_size, self.stats["requests"],
@@ -723,6 +752,7 @@ class LLMComponent:
                              f"/{self.budget.limit}" if self.budget.limit else "")
         except FatalProviderError as e:
             self.stopped = f"{e.category}: {e}"
+            self.stop_kind = "fatal"
         if self.stopped:
             left = sum(1 for k, _ in todo if self.cache.get(k) is None)
             log.error("%s (%s / %s) STOPPED.\n    Reason: %s\n    %d comments still to do; everything answered so far "
