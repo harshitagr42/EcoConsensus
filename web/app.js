@@ -4,7 +4,6 @@
 
 const CFG = window.ECO_CONFIG || {};
 const API = (new URLSearchParams(location.search).get("api") || CFG.API_BASE_URL || "").replace(/\/+$/, "");
-const SPACE_PAGE = CFG.SPACE_PAGE_URL || "";
 const CLASSES = ["favour", "neutral", "against"];
 const CLASS_TEXT = { favour: "favour", neutral: "neutral (None)", against: "against", ignore: "ignore (not scored)" };
 const LS = { limits: "eco.limits", job: "eco.job" };
@@ -39,14 +38,14 @@ class ApiError extends Error {
 }
 
 async function api(path, opts = {}) {
-  if (!API || API.includes("YOUR-HF-USERNAME")) {
+  if (!API) {
     throw new ApiError("config", "The website is not connected to a backend yet (API_BASE_URL in config.js).");
   }
   let r;
   try {
     r = await fetch(API + path, opts);
   } catch {
-    throw new ApiError("offline", "The backend cannot be reached. It is paused, asleep or restarting.");
+    throw new ApiError("offline", "The backend cannot be reached. The server is switched off or restarting.");
   }
   let body = null;
   try { body = await r.json(); } catch { /* not JSON */ }
@@ -54,22 +53,18 @@ async function api(path, opts = {}) {
     const retry = Number(r.headers.get("Retry-After")) || (body && body.retry_after) || null;
     const kind = r.status === 429 ? "rate" : r.status === 503 ? "busy" : r.status === 404 ? "missing" : "http";
     let msg = (body && body.detail) || `The backend answered with HTTP ${r.status}.`;
-    if (!body && (r.status === 502 || r.status === 503)) msg = "The backend is starting or asleep.";
+    if (!body && r.status >= 500) msg = "The backend server is switched off or starting (Cloudflare could not reach it).";
     throw new ApiError(kind, msg, r.status, retry);
   }
   return body;
 }
 
-function banner(msg, { warn = false, wake = false } = {}) {
+function banner(msg, { warn = false } = {}) {
   const b = $("#banner");
   if (!msg) { b.hidden = true; return; }
   b.hidden = false;
   b.className = "banner" + (warn ? " warn" : "");
   b.replaceChildren(el("span", { text: msg }));
-  if (wake && SPACE_PAGE && !SPACE_PAGE.includes("YOUR-HF-USERNAME")) {
-    b.append(" ", el("a", { href: SPACE_PAGE, target: "_blank", rel: "noopener", text: "Open the backend page to wake it up" }),
-      " (takes about a minute), then reload this page.");
-  }
 }
 
 function explain(e) {
@@ -108,8 +103,7 @@ async function checkHealth() {
     pill.className = "pill pill-bad";
     pill.textContent = e.kind === "config" ? "Not connected" : "Offline";
     banner(e.kind === "config" ? e.message
-      : "The backend is offline (paused, asleep or restarting). Uploads are not possible right now; this page checks again every 30 s.",
-      { wake: e.kind !== "config" });
+      : "The backend server is switched off or restarting, so uploads are not possible right now. It is online while the project is being evaluated; this page checks again every 30 s.");
   }
 }
 
@@ -167,7 +161,7 @@ async function onFile(file) {
     renderMapping();
     show(["step-map"]);
   } catch (e) {
-    banner(explain(e), { wake: e.kind === "offline" });
+    banner(explain(e));
   } finally {
     $("#drop-text").textContent = "Choose a CSV file or drop it here";
     $("#file").value = "";
@@ -359,7 +353,7 @@ async function poll() {
       return reset();
     }
     pollFailures += 1;
-    if (pollFailures >= 3) banner("Lost contact with the backend; still retrying. If it restarted, the run is lost and you need to upload again.", { warn: true, wake: true });
+    if (pollFailures >= 3) banner("Lost contact with the backend; still retrying. If it restarted, the run is lost and you need to upload again.", { warn: true });
   }
   state.poll = setTimeout(poll, 2000);
 }

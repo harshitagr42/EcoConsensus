@@ -1,104 +1,107 @@
 # Deployment: website + API
 
 ```
-Browser ─► EcoConsensus.harshitagr42.com     Cloudflare Pages, serves web/ only (always online)
-              │ fetch (CORS: only this origin)
-              ▼
-           <you>-ecoconsensus-api.hf.space    Hugging Face Space (Docker, free CPU): api/ + src/ + configs/ + prompts/
-              │ while the image is built      LLM keys = Space secrets
-              ├─► <you>/ecoconsensus-weights  public HF model repo: LoRA adapters, meta-models, baselines (28 MB)
-              └─► google/muril-base-cased, ai4bharat/IndicBERTv2-MLM-only
+Browser ─► EcoConsensus.harshitagr42.com   Cloudflare Pages: web/ (always online)
+             │ fetch (CORS: only this origin)
+             ▼
+          api.harshitagr42.com              Cloudflare Tunnel (HTTPS; no open ports on the server)
+             ▼
+          AWS EC2 t3.medium, Docker         api/ + src/ + configs/ + prompts/ + inference.py, .env mounted read-only
+             └─ at first start ─► <hf-user>/ecoconsensus-weights (HF model repo) + both base models (kept on disk)
 ```
 
-| Folder | Goes to | How it is selected |
+| What | Goes to | Selected by |
 |---|---|---|
-| `web/` | Cloudflare Pages | Pages "build output directory" = `web` |
-| `api/` + `src/` + `configs/` + `prompts/` + `inference.py` | HF Space | explicit list `BUNDLE` in `scripts/hf_space.py` |
-| `models/finetuned/` | HF model repo | `scripts/hf_space.py weights` (git-ignored; never on GitHub) |
+| `web/` | Cloudflare Pages | Pages output directory `web` |
+| `api/ src/ configs/ prompts/ inference.py` | EC2 server | allow-list in `scripts/deploy_backend.sh` (and `.dockerignore`) |
+| `models/finetuned/` | HF model repo | `scripts/hf_weights.py` (never GitHub, never the server's code folder) |
+| `.env` (keys) | EC2 `~/ecoconsensus/.env` | `scripts/deploy_backend.sh … --env` (mode 600, outside the image) |
 
-## 1. Hugging Face (once)
+Cost: t3.medium ≈ USD 1/day on, 30 GB disk ≈ USD 2.5/month, public IPv4 ≈ USD 3.6/month. Three weeks ≈ USD 26.
+A stopped instance costs only the disk.
 
-1. Create an account at huggingface.co. Settings → Access Tokens → **New token**, type **Write**.
-2. Log in locally (the token stays on your Mac):
-   ```bash
-   source .venv/bin/activate
-   pip install -r requirements.txt          # adds fastapi, uvicorn, huggingface_hub
-   hf auth login                            # paste the token
-   ```
-3. Put both keys of each LLM in `.env`, numbered from 1 (used in this order):
-   ```
-   LLM_A_API_KEY_1=gemini_key_account1
-   LLM_A_API_KEY_2=gemini_key_account2
-   LLM_B_API_KEY_1=groq_key_account1
-   LLM_B_API_KEY_2=groq_key_account2
-   ```
-   Also accepted: `LLM_A_API_KEYS=key1,key2`, or a single `LLM_A_API_KEY`. `LLM_<S>_DAILY_LIMIT` applies per key.
-   `secrets` (step 6) sends them to the Space as one secret per LLM, `LLM_A_API_KEYS` / `LLM_B_API_KEYS`.
-4. Upload the weights (public model repo `<you>/ecoconsensus-weights`):
-   ```bash
-   python scripts/hf_space.py weights
-   ```
-5. Create and deploy the Space (`<you>/ecoconsensus-api`, Docker, public). Check the file list first:
-   ```bash
-   python scripts/hf_space.py deploy --dry-run
-   python scripts/hf_space.py deploy
-   ```
-6. Copy the LLM settings and keys to the Space (variables: provider, model, URL, limits; **secrets**: keys):
-   ```bash
-   python scripts/hf_space.py secrets
-   ```
-   Same thing by hand: Space → Settings → *Variables and secrets*.
-7. Wait for the build (Space page → *Logs*, 5–10 min). Then:
-   ```bash
-   python scripts/hf_space.py status        # prints the API URL
-   curl https://<you>-ecoconsensus-api.hf.space/health
-   ```
-   `"models": "ready"` and both LLMs `"configured": true` means it works.
+## 0. Already done
 
-## 2. Website
+Weights uploaded: `python scripts/hf_weights.py` (`--name` prints the repo id). Add to the local `.env`:
+```
+WEIGHTS_REPO=<hf-user>/ecoconsensus-weights
+LLM_A_API_KEY_1=…   LLM_A_API_KEY_2=…   LLM_B_API_KEY_1=…   LLM_B_API_KEY_2=…
+```
+Check: `python -c "from src.llm_api import api_keys; print(len(api_keys('a')), len(api_keys('b')))"` → `2 2`.
 
-1. Put the two URLs printed by `status` into `web/config.js` (`API_BASE_URL`, `SPACE_PAGE_URL`) and commit.
-2. Cloudflare Pages → connect the GitHub repo: framework *None*, build command *empty*, build output directory
-   **`web`**. Build watch paths (Settings → Builds): include `web/*` so other commits do not redeploy.
-3. Custom domain: `ecoconsensus.harshitagr42.com`. DNS is case-insensitive; `EcoConsensus.harshitagr42.com` works too.
-4. If you use another domain or the `*.pages.dev` address, add it to the API:
-   `python scripts/hf_space.py secrets --origin https://other.domain` (comma-separate several).
+## 1. EC2 server (AWS console)
 
-Local test: `uvicorn api.app:app --port 7860` and `cd web && python -m http.server 8080`, then open
+1. **Billing → Budgets → Create budget**: monthly cost budget, e.g. USD 40, e-mail alert at 80 %.
+2. **EC2 → Launch instance** (region close to you, e.g. ap-south-1 Mumbai):
+   - Name `ecoconsensus`; AMI **Ubuntu Server 24.04 LTS (x86_64)**; type **t3.medium**.
+   - Key pair: create `ecoconsensus` (RSA, .pem). Save it as `~/.ssh/ecoconsensus.pem`, then `chmod 400 ~/.ssh/ecoconsensus.pem`.
+   - Network: auto-assign public IP **on**; security group: **SSH (22) from My IP** only. No HTTP/HTTPS rules
+     (the tunnel connects outward).
+   - Storage: **30 GB gp3**.
+3. Note the instance's **public IPv4** (it changes after every stop/start; only SSH uses it).
+
+## 2. Server setup (once)
+
+From the project root on the Mac (`IP` = the public IPv4):
+```bash
+scripts/deploy_backend.sh ubuntu@IP -i ~/.ssh/ecoconsensus.pem --env --no-start   # code + .env
+ssh -i ~/.ssh/ecoconsensus.pem ubuntu@IP
+```
+On the server:
+```bash
+bash ~/ecoconsensus/app/api/server.sh setup                        # swap, Docker, cloudflared (~3 min)
+bash ~/ecoconsensus/app/api/server.sh tunnel api.harshitagr42.com  # prints a URL: open it on the Mac, pick harshitagr42.com
+bash ~/ecoconsensus/app/api/server.sh start                        # build (~5 min) and start
+bash ~/ecoconsensus/app/api/server.sh status                       # wait for "models":"ready" (first start ~2-3 min)
+```
+`tunnel` creates the DNS record `api.harshitagr42.com` in Cloudflare and installs the tunnel as a service.
+Check from the Mac: `curl https://api.harshitagr42.com/health` → `"models":"ready"`, both LLMs `"keys":2`.
+
+## 3. Website (Cloudflare Pages)
+
+`web/config.js` already points to `https://api.harshitagr42.com`. Pages → connect the GitHub repo: framework *None*,
+build command *empty*, output directory **`web`**, build watch paths include `web/*`. Custom domain
+`ecoconsensus.harshitagr42.com` (DNS ignores case). Another origin (e.g. `*.pages.dev`) must be added to the server's
+`.env`: `ALLOWED_ORIGINS=https://ecoconsensus.harshitagr42.com,https://<x>.pages.dev`, then `server.sh start`.
+
+Local test: `uvicorn api.app:app --port 7860` and `cd web && python -m http.server 8080`, then
 `http://localhost:8080/?api=http://localhost:7860`.
 
-## 3. Running it for the professor
+## 4. Running it
 
-| When | Command |
+| When | What |
 |---|---|
-| Professor asks for the link | `python scripts/hf_space.py restart` (≈1 min), then check `/health` |
-| After code changes | `python scripts/hf_space.py deploy` (rebuilds) |
-| Professor is done | `python scripts/hf_space.py pause` (free, keys unused; the site shows "offline") |
+| Professor asks for the link | EC2 console → instance → **Start**. API and tunnel start by themselves (~2 min); check `/health` |
+| Professor is done | EC2 console → **Stop** (the site then says the server is switched off). **Terminate** at the end of the project |
+| Code changed | `scripts/deploy_backend.sh ubuntu@IP -i ~/.ssh/ecoconsensus.pem` (rebuild + restart) |
+| `.env` changed (keys, limits) | same with `--env` |
+| Logs | on the server: `bash ~/ecoconsensus/app/api/server.sh logs` |
 
-A free Space also **sleeps after ~48 h without visits**; the website then shows "offline" with a link to the Space page,
-which wakes it (about a minute). Paused Spaces only start with `restart`.
+Weights, base models and the LLM cache/daily counters live in `~/ecoconsensus/data/` and survive restarts and
+rebuilds. After terminating the instance, also delete the tunnel (Cloudflare → Zero Trust → Networks → Tunnels) and
+the `api` DNS record.
 
-Before sending the link: the professor's ~1,000 rows need about `1000 / LLM_BATCH_SIZE` requests per LLM (plus
-retries); check that this fits the free daily quota of one key (`python -m src.training.run_llm_batch --estimate`).
-Check also that the providers' terms allow using two free accounts.
+Before sending the link: 1,000 rows need about `1000 / LLM_BATCH_SIZE` requests per LLM (plus retries); check the free
+daily quota of one key (`python -m src.training.run_llm_batch --estimate`), and that the providers' terms allow two
+free accounts.
 
-## 4. Limits (enforced by the API, shown on the website)
+## 5. Limits (enforced by the API, shown on the website)
 
-Defaults in `api/settings.py`; override any of them as a Space variable (e.g. `JOBS_PER_DAY=30`).
+Defaults in `api/settings.py`; override in the server's `.env` (e.g. `JOBS_PER_DAY=30`), then `server.sh start`.
 
 | Setting | Default |
 |---|---|
 | `MAX_ROWS` / `MAX_FILE_MB` | 2000 rows / 5 MB, CSV only |
-| `JOBS_PER_IP_PER_HOUR` | 5 runs per visitor (IP) per hour |
+| `JOBS_PER_IP_PER_HOUR` | 5 runs per visitor (IP, from Cloudflare's `CF-Connecting-IP`) per hour |
 | `JOBS_PER_DAY` | 20 runs per day, all visitors together (protects the LLM quota) |
 | `UPLOADS_PER_IP_PER_HOUR` | 30 file previews (no model or LLM used) |
 | `QUEUE_MAX` | 5 waiting runs; one runs at a time |
 | `RESULT_TTL_HOURS` | 6 h, then uploads and results are deleted |
 
-Counters live in memory: a restart resets them. Someone switching IPs gets around the per-IP limit, not the daily one.
-A run that fails on the server's side is not counted.
+Counters live in memory: a restart resets them. Switching IPs gets around the per-IP limit, not the daily one. A run
+that fails on the server's side is not counted. Measured: a run peaks at ~1.5 GB RAM; 30 rows take ~25 s.
 
-## 5. Mapping on the website
+## 6. Mapping on the website
 
 After the upload the site shows two tables, always:
 

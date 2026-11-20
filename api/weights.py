@@ -1,7 +1,8 @@
-"""Model files for the Space: the fine-tuned weights (LoRA adapters, meta-models, baselines) come from a separate
-Hugging Face model repo into models/finetuned/; the base models come from the Hub cache.
+"""Model files for the server: the fine-tuned weights (LoRA adapters, meta-models, baselines) come from a separate
+Hugging Face model repo into models/finetuned/; the base models go to the Hub cache. On the server both folders are
+Docker volumes, so they are downloaded once. The API runs this at startup (GET /health says "loading" meanwhile).
 
-    python -m api.weights        # download both and load each transformer once (run while the Docker image is built)
+    python -m api.weights        # the same by hand
 """
 from __future__ import annotations
 
@@ -24,7 +25,8 @@ def ensure_weights() -> None:
     if not missing_files():
         return
     if not settings.WEIGHTS_REPO:
-        raise RuntimeError("Model files missing and WEIGHTS_REPO is not set (Space variable or api/deploy.json)")
+        raise RuntimeError("Model files missing and WEIGHTS_REPO is not set (add WEIGHTS_REPO=<hf-user>/"
+                           "ecoconsensus-weights to the server's .env)")
     from huggingface_hub import snapshot_download
 
     from src.config import path

@@ -1,4 +1,4 @@
-"""EcoConsensus web API (runs on a Hugging Face Space; the website in web/ calls it).
+"""EcoConsensus web API (Docker on an EC2 server behind a Cloudflare Tunnel; the website in web/ calls it).
 
     GET  /health                 models ready?, LLMs configured, quota state, queue
     GET  /limits                 the limits below + how many runs this visitor has left
@@ -50,9 +50,11 @@ app.add_middleware(CORSMiddleware, allow_origins=settings.ALLOWED_ORIGINS, allow
 
 
 def _prepare_models() -> None:
-    from api.weights import ensure_weights
+    """Weights from the HF model repo, then each base model loaded once (both cached on the server's disk)."""
+    from api.weights import ensure_weights, warm_base_models
     try:
         ensure_weights()
+        warm_base_models()
         STATE.update(models="ready", error=None)
     except Exception as e:  # noqa: BLE001
         log.exception("model files")
@@ -60,7 +62,11 @@ def _prepare_models() -> None:
 
 
 def client_ip(request: Request) -> str:
-    """The visitor's address as the Space's proxy reports it (first X-Forwarded-For entry)."""
+    """The visitor's address. Behind the Cloudflare Tunnel, Cloudflare sets CF-Connecting-IP itself (a visitor cannot
+    fake it); X-Forwarded-For is the fallback for other proxies, then the direct peer (local runs)."""
+    cf = request.headers.get("cf-connecting-ip", "").strip()
+    if cf:
+        return cf
     xff = request.headers.get("x-forwarded-for", "")
     return xff.split(",")[0].strip() or (request.client.host if request.client else "unknown")
 

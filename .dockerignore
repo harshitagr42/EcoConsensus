@@ -1,0 +1,11 @@
+# The API image gets only what it needs to serve (allow-list). Secrets (.env) are mounted at run time, never built in.
+*
+!api/
+!src/
+!configs/
+!prompts/
+!inference.py
+src/training/
+**/__pycache__/
+**/*.pyc
+**/.DS_Store

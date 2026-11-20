@@ -1,16 +1,18 @@
-"""Limits and deployment settings of the web API. Every value can be overridden by an environment variable
-(a Space "variable" on Hugging Face). GET /limits sends them to the website, so what the page shows is what is
-enforced here."""
+"""Limits and deployment settings of the web API. Every value can be overridden by a line in the server's .env
+(e.g. JOBS_PER_DAY=30). GET /limits sends them to the website, so what the page shows is what is enforced here."""
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 
 API_DIR = Path(__file__).resolve().parent
 ROOT = API_DIR.parent
-_DEPLOY = API_DIR / "deploy.json"          # written by scripts/hf_space.py deploy (weights repo name)
-DEPLOY = json.loads(_DEPLOY.read_text(encoding="utf-8")) if _DEPLOY.exists() else {}
+
+try:                                       # the server's .env (mounted into the container) before reading any value
+    from dotenv import load_dotenv
+    load_dotenv(ROOT / ".env", override=False)
+except ImportError:
+    pass
 
 
 def _num(name: str, default: float) -> float:
@@ -35,7 +37,7 @@ ALLOWED_ORIGINS = [o.strip().rstrip("/") for o in os.environ.get(
 # local testing of web/ (python -m http.server 8080 inside web/)
 ALLOWED_ORIGINS += ["http://localhost:8080", "http://127.0.0.1:8080"]
 
-WEIGHTS_REPO = os.environ.get("WEIGHTS_REPO") or DEPLOY.get("weights_repo")
+WEIGHTS_REPO = os.environ.get("WEIGHTS_REPO")              # e.g. <hf-user>/ecoconsensus-weights (server .env)
 WORK_DIR = Path(os.environ.get("WORK_DIR", "/tmp/ecoconsensus"))
 DEVICE = os.environ.get("DEVICE", "cpu")
 

@@ -66,4 +66,3 @@ Thumbs.db
 
 # Leftover folders from unzipping <model>_results.zip somewhere other than the project root
 *_results/
-api/deploy.json

@@ -165,3 +165,13 @@ def test_numbered_keys(monkeypatch):
     assert api_keys("a") == ["k1", "k2"]                 # numbered keys win over the single one
     monkeypatch.setenv("LLM_A_API_KEYS", "x,y")
     assert api_keys("a") == ["x", "y"]
+
+
+def test_visitor_ip_comes_from_cloudflare(client):
+    a = {"CF-Connecting-IP": "203.0.113.1", "X-Forwarded-For": "1.2.3.4"}
+    up = client.post("/inspect", headers=a, files={"file": ("p.csv", pd.DataFrame(ROWS, columns=["No", "Comment Text", "prediction"]).to_csv(index=False).encode(), "text/csv")}).json()
+    body = dict(upload_id=up["upload_id"], comment_col="Comment Text", confirm_no_labels=True)
+    wait(client, client.post("/jobs", json=body, headers=a).json()["id"])
+    assert client.get("/limits", headers=a).json()["you"]["left_this_hour"] == 1
+    other = {"CF-Connecting-IP": "203.0.113.2", "X-Forwarded-For": "203.0.113.1"}     # spoofed XFF is ignored
+    assert client.get("/limits", headers=other).json()["you"]["left_this_hour"] == 2

@@ -14,7 +14,7 @@ pytest>=8.0
 torch==2.14.1
 transformers==5.22.2
 peft==0.21.2
-# Web API (api/, deployed to a Hugging Face Space; tests/test_api.py) and scripts/hf_space.py
+# Web API (api/, Docker on the EC2 server; tests/test_api.py) and scripts/hf_weights.py
 fastapi>=0.115
 uvicorn>=0.30
 python-multipart>=0.0.9
