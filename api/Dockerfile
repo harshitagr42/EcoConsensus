@@ -18,7 +18,10 @@ RUN pip install --user --index-url https://download.pytorch.org/whl/cpu torch==2
     pip install --user -r api/requirements.txt
 
 COPY --chown=user . .
-RUN mkdir -p models/finetuned outputs /home/user/.cache/huggingface
+# The classic Docker builder (docker.io on Ubuntu) creates WORKDIR as root, so the user could not add folders here
+USER root
+RUN mkdir -p models/finetuned outputs /home/user/.cache/huggingface && chown -R user:user /home/user
+USER user
 
 EXPOSE 7860
 CMD ["uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "1"]
