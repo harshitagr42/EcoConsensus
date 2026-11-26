@@ -23,7 +23,9 @@ cmd_setup() {
     sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
     echo "/swapfile none swap sw 0 0" | sudo tee -a /etc/fstab >/dev/null
   fi
-  sudo apt-get update -y && sudo apt-get install -y docker.io curl
+  # non-interactive: no "which services should be restarted?" dialog on Ubuntu
+  sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get update -y
+  sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y docker.io curl
   sudo systemctl enable --now docker
   if ! command -v cloudflared >/dev/null; then
     curl -fsSL -o /tmp/cloudflared.deb \
