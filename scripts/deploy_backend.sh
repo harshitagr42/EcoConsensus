@@ -34,7 +34,9 @@ echo "code copied: ${ALLOW[*]}"
 
 if [ "$WITH_ENV" = 1 ]; then
   grep -q '^WEIGHTS_REPO=' .env || { echo "add WEIGHTS_REPO=<hf-user>/ecoconsensus-weights to .env first"; exit 1; }
-  rsync -a --chmod=F600 -e "ssh ${SSH_OPTS[*]}" .env "$HOST:ecoconsensus/.env"
+  # scp + chmod: the macOS rsync does not support --chmod
+  scp -q "${SSH_OPTS[@]}" .env "$HOST:ecoconsensus/.env"
+  ssh "${SSH_OPTS[@]}" "$HOST" "chmod 600 ~/ecoconsensus/.env"
   echo ".env copied (mode 600)"
 fi
 
