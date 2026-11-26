@@ -6,7 +6,7 @@ Browser ─► EcoConsensus.harshitagr42.com   Cloudflare Pages: web/ (always on
              ▼
           api.harshitagr42.com              Cloudflare Tunnel (HTTPS; no open ports on the server)
              ▼
-          AWS EC2 t3.medium, Docker         api/ + src/ + configs/ + prompts/ + inference.py, .env mounted read-only
+          AWS EC2 c7i-flex.large, Docker    api/ + src/ + configs/ + prompts/ + inference.py, .env mounted read-only
              └─ at first start ─► <hf-user>/ecoconsensus-weights (HF model repo) + both base models (kept on disk)
 ```
 
@@ -17,7 +17,9 @@ Browser ─► EcoConsensus.harshitagr42.com   Cloudflare Pages: web/ (always on
 | `models/finetuned/` | HF model repo | `scripts/hf_weights.py` (never GitHub, never the server's code folder) |
 | `.env` (keys) | EC2 `~/ecoconsensus/.env` | `scripts/deploy_backend.sh … --env` (mode 600, outside the image) |
 
-Cost: t3.medium ≈ USD 1/day on, 30 GB disk ≈ USD 2.5/month, public IPv4 ≈ USD 3.6/month. Three weeks ≈ USD 26.
+Cost (us-east-1): c7i-flex.large (2 vCPU, 4 GB) ≈ USD 2/day on, 30 GB disk ≈ USD 2.4/month, public IPv4 ≈ USD 3.6/month.
+Three weeks on ≈ USD 47. A job peaks at ~1.5 GB, so 4 GB is enough; m7i-flex.large (8 GB, ≈ USD 2.3/day) only adds headroom.
+Smaller types (t3.small, t8i.small: 2 GB) are too tight for the image build plus both models.
 A stopped instance costs only the disk.
 
 ## 0. Already done
@@ -33,7 +35,7 @@ Check: `python -c "from src.llm_api import api_keys; print(len(api_keys('a')), l
 
 1. **Billing → Budgets → Create budget**: monthly cost budget, e.g. USD 40, e-mail alert at 80 %.
 2. **EC2 → Launch instance** (region close to you, e.g. ap-south-1 Mumbai):
-   - Name `ecoconsensus`; AMI **Ubuntu Server 24.04 LTS (x86_64)**; type **t3.medium**.
+   - Name `ecoconsensus`; AMI **Ubuntu Server 24.04 LTS (x86_64)**; type **c7i-flex.large** (on new free-plan accounts the larger t3 types are not offered).
    - Key pair: create `ecoconsensus` (RSA, .pem). Save it as `~/.ssh/ecoconsensus.pem`, then `chmod 400 ~/.ssh/ecoconsensus.pem`.
    - Network: auto-assign public IP **on**; security group: **SSH (22) from My IP** only. No HTTP/HTTPS rules
      (the tunnel connects outward).
