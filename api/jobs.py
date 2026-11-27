@@ -26,8 +26,12 @@ from api import settings
 
 LABEL_CLASSES = ["favour", "neutral", "against"]          # our ids 0 / 1 / 2
 CHOICES = LABEL_CLASSES + ["ignore"]
-OUTPUT_STYLES = {"file": "same values as the uploaded file", "ps": "Favour / None / Against",
-                 "numeric": "our ids 0 / 1 / 2"}
+# Label spelling in the prediction files. "numeric" is the default (0 favour, 1 neutral, 2 against).
+OUTPUT_STYLES = {"numeric": "0 / 1 / 2 (0 = favour, 1 = neutral, 2 = against)",
+                 "lower": "favour / neutral / against", "upper": "FAVOR / NONE / AGAINST",
+                 "ps": "Favour / None / Against", "file": "same values as the uploaded file"}
+FIXED_SPELLINGS = {"lower": {0: "favour", 1: "neutral", 2: "against"}, "upper": {0: "FAVOR", 1: "NONE", 2: "AGAINST"}}
+LABEL_KEY = "0 = favour, 1 = neutral (none), 2 = against"
 PREVIEW_ROWS = 50
 # Column names that probably hold the gold stance although the loader would not pick them (the professor's file may
 # call it predict / prediction / target).
@@ -275,11 +279,11 @@ def validate(params: dict) -> dict:
             raise UserError("The stance column is chosen but no value is mapped to favour / neutral / against.")
     elif not params.get("confirm_no_labels"):
         raise UserError("No stance column chosen: confirm that you want predictions without metrics.")
-    style = params.get("output_style") or ("file" if label else "ps")
+    style = params.get("output_style") or "numeric"
     if style not in OUTPUT_STYLES:
         raise UserError(f"output_style must be one of {list(OUTPUT_STYLES)}.")
     if style == "file" and not label:
-        style = "ps"
+        style = "numeric"
     return dict(upload_id=meta["upload_id"], filename=meta["filename"], rows=meta["rows"], comment_col=comment,
                 claim_col=claim, label_col=label, id_col=id_, label_map=lm, output_style=style)
 
@@ -478,7 +482,7 @@ def run_job(job: Job) -> None:
 
     # ---- report and files (inference.py writes the same files as a command-line run)
     _set(job, "report", "running")
-    file_map = None
+    file_map = FIXED_SPELLINGS.get(p["output_style"])
     if p["output_style"] == "file":
         file_map = {}
         counts = pd.Series(df["label_raw"]).value_counts() if "label_raw" in df else pd.Series(dtype=int)
@@ -491,7 +495,8 @@ def run_job(job: Job) -> None:
         if missing:
             job.warnings.append(f"Your file has no value for {', '.join(missing)}; predictions of that class are "
                                 f"written as Favour / None / Against.")
-    args = SimpleNamespace(mode="ensemble", device=settings.DEVICE, batch_size=None, label_style=p["output_style"],
+    label_style = "file" if file_map is not None else p["output_style"]      # fixed spellings go through file_map
+    args = SimpleNamespace(mode="ensemble", device=settings.DEVICE, batch_size=None, label_style=label_style,
                            require_llm=False, allow_unknown_labels=True, json=True, quiet=True)
     cfg = dict(data_file=job.filename, id_col=p["id_col"], text_col=p["comment_col"], label_col=p["label_col"],
                claim_col=p["claim_col"], language_col=None, label_map=p["label_map"], fixed_claim=FIXED_CLAIM,
@@ -501,20 +506,34 @@ def run_job(job: Job) -> None:
     with contextlib.redirect_stdout(io.StringIO()):         # the JSON summary it prints is not needed here
         inf._write_file_results(args, cfg, df, info, res, models, Path(job.filename), job.dir, lg, log_file,
                                 file_map=file_map)
+    write_output_file(job, df, res, label_style, file_map)
     from src.utils import to_jsonable
     make_zip(job)
-    job.results = to_jsonable(collect_results(job, df, res, file_map, n_lab))     # NaN -> null
+    job.results = to_jsonable(collect_results(job, df, res, label_style, file_map, n_lab))     # NaN -> null
     _set(job, "report", "done", "ready")
     job.status = "done"
 
 
-def collect_results(job: Job, df: pd.DataFrame, res, file_map, n_lab: int) -> dict:
+def write_output_file(job: Job, df: pd.DataFrame, res, label_style: str, file_map) -> None:
+    """The evaluator's file: output_<group id>.csv with the columns Id and label, one row per input row in the input's
+    order, the Id values copied unchanged; plus label_key.txt saying what the labels mean."""
+    from src.pipeline import final_prediction, format_labels
+    pred, _ = final_prediction(res, "ensemble")
+    out = pd.DataFrame({"Id": df["id"].astype(str).to_numpy(), "label": format_labels(pred, label_style, file_map)})
+    out.to_csv(job.dir / settings.OUTPUT_FILE, index=False)
+    spelled = {i: format_labels([i], label_style, file_map)[0] for i in range(3)}
+    key = (f"{settings.OUTPUT_FILE}: columns Id, label ({len(out)} rows, same order and Ids as the input file)\n"
+           f"label values: {spelled[0]} = favour, {spelled[1]} = neutral (none), {spelled[2]} = against\n"
+           f"claim: Climate change and global warming is a serious concern.\n")
+    (job.dir / "label_key.txt").write_text(key, encoding="utf-8")
+
+
+def collect_results(job: Job, df: pd.DataFrame, res, style: str, file_map, n_lab: int) -> dict:
     import json
 
     from src.config import LABELS
     from src.ensembling import LLMS, TRANSFORMERS
     from src.pipeline import DISPLAY, final_prediction, format_labels
-    style = job.params["output_style"]
     pred, source = final_prediction(res, "ensemble")
     systems = [s for s in [*TRANSFORMERS, *LLMS, "soft_vote", "majority_vote", "tfidf_lr", "stacked"]
                if s in res.preds]
@@ -552,14 +571,18 @@ def collect_results(job: Job, df: pd.DataFrame, res, file_map, n_lab: int) -> di
                 [(s, DISPLAY[s]) for s in systems] + [("final", "Final")],
                 preview=rows, rows=len(df), labelled=n_lab, empty=int(df["empty"].sum()), metrics=metrics,
                 confusion=conf, distribution=dist, variants={str(k): int(v) for k, v in variants.items()},
-                llm=llm, report=report, output_style=style, output_style_text=OUTPUT_STYLES[style],
+                llm=llm, report=report, output_style=job.params["output_style"],
+                output_style_text=OUTPUT_STYLES[job.params["output_style"]], output_file=settings.OUTPUT_FILE,
+                label_key={str(i): format_labels([i], style, file_map)[0] for i in range(3)},
                 label_map=job.params["label_map"], mapping={k: job.params[k] for k in
                                                             ("comment_col", "claim_col", "label_col", "id_col")},
                 files=[f for f in FILES if file_path(job, f)])
 
 
 # downloadable files: name -> (path pattern inside the job folder, description)
-FILES = {"predictions.csv": ("predictions.csv", "ID + final prediction"),
+FILES = {settings.OUTPUT_FILE: (settings.OUTPUT_FILE, "prediction file for the evaluator: Id, label"),
+         "label_key.txt": ("label_key.txt", "what the label values mean"),
+         "predictions.csv": ("predictions.csv", "ID + final prediction (inference.py format)"),
          "evaluation.csv": ("evaluation.csv", "metrics of every system"),
          "report.md": ("result.txt", "full report (Markdown)"),
          "details.csv": ("predictions/*_detailed.csv", "every system's prediction and probabilities per row"),

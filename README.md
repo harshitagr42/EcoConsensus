@@ -11,6 +11,32 @@ Stance detection on global warming for Hindi and Bengali comments (CSET 346 NLP 
 | Data, baselines, LLM layer, stacking scripts (`src/`, `src/training/`) | Written (Days 1–3); runbook in `src/training/README.md` |
 | MuRIL and IndicBERT (LoRA) | Trained on Colab (2026-11-10); scored with `python -m src.evaluate` |
 | `inference.py` (`src/pipeline.py`): one comment or a test file | Written (Day 4); guide `INFERENCE.md` |
+| Deployment: website `web/` + API `api/` | Live at <https://ecoconsensus.harshitagr42.com> (API `https://api.harshitagr42.com`); guide `docs/DEPLOYMENT.md` |
+
+## Final evaluation: `input.csv` → `output_04.csv`
+
+1. Open <https://ecoconsensus.harshitagr42.com> (the badge at the top right must say **Online**).
+2. Upload `input.csv` (columns `Id`, `text`). Both columns are recognised automatically; confirm the mapping
+   (no true-stance column → "predictions only").
+3. Choose the label format if needed (default `0` / `1` / `2`) and press **Run prediction**. The page shows each stage
+   (cleaning, MuRIL, IndicBERT, both LLMs, meta-model).
+4. Download **`output_04.csv`**: columns `Id`, `label`, one row per input row, same order and same Ids as `input.csv`.
+
+Label key: **`0` = favour, `1` = neutral (none), `2` = against** (other spellings: `favour/neutral/against`,
+`FAVOR/NONE/AGAINST`, `Favour/None/Against`; the chosen key is shown next to the download and saved as
+`label_key.txt`). Limits (2,000 rows, 5 MB, runs per hour) are shown on the page. Without the website the same
+system runs locally with `python inference.py -f input.csv --label-style numeric` (see `INFERENCE.md`); it writes
+`outputs/inference/predictions.csv` with the columns `ID`, `Predicted_Label`, to be renamed for submission.
+
+## Architecture
+
+![EcoConsensus architecture](docs/architecture.svg)
+
+Each comment is cleaned (PP) and paired with the fixed claim. MuRIL (MU) and IndicBERT v2 (IB), fine-tuned with LoRA
+on Pol-NLI, give class probabilities; two zero-shot LLMs (LA: Gemini 3.5 Flash-Lite, LB: gpt-oss-20b) give one label
+each. The 12 features are concatenated (FC) and a logistic-regression meta-model (MM) gives the final class; if an LLM
+does not answer, a variant without it is used, and TF-IDF + LR (TF) covers comments with no transformer output. Full
+design: `docs/STACKING_ENSEMBLE.md`.
 
 ## Where to start
 
@@ -18,6 +44,8 @@ Stance detection on global warming for Hindi and Bengali comments (CSET 346 NLP 
 |---|---|
 | Run the experiments on Colab or Kaggle | `experiment/SETUP.md` |
 | Understand the requirements | `docs/PRD.md`, `docs/TRD.md` |
+| Know everything about the data (sources, creation, labels, statistics) | `docs/DATASET.md` |
+| Deploy or operate the website and API | `docs/DEPLOYMENT.md` |
 | See how everything connects | `docs/APP_FLOW.md` |
 | See the plan and day-by-day sign-offs | `docs/IMPLEMENTATION_PLAN.md` |
 | See how the ensemble is built and trained | `docs/STACKING_ENSEMBLE.md` |
@@ -26,7 +54,7 @@ Stance detection on global warming for Hindi and Bengali comments (CSET 346 NLP 
 
 ## Repository layout
 
-See `docs/TRD.md` section 3. Short version: `data/` (raw, translated, processed, `test/` for the evaluator's file), `experiment/` (notebook, setup, generated reports), `src/` (with `src/training/` for data preparation and the Colab notebooks), `models/original` and `models/finetuned`, `outputs/`, `tests/` (unit tests), `docs/`, `prompts/`.
+See `docs/TRD.md` section 3. Short version: `data/` (raw, translated, processed, `test/` for the evaluator's file), `experiment/` (notebook, setup, generated reports), `src/` (with `src/training/` for data preparation and the Colab notebooks), `models/original` and `models/finetuned`, `outputs/`, `tests/` (unit tests), `docs/`, `prompts/`, `web/` (website, Cloudflare Pages), `api/` (backend, Docker on EC2), `scripts/` (deployment, weight upload, `data_sources/` dataset preprocessing). `data/` and `models/` are not in git: the data is rebuilt from its public sources (`docs/DATASET.md` section 8) and the fine-tuned weights are on Hugging Face (<https://huggingface.co/harshit126/ecoconsensus-weights>).
 
 `outputs/` has one folder per component, each with the same four subfolders:
 
@@ -82,7 +110,9 @@ Copy `.env.example` to `.env` and fill in the two LLM providers' details. `.env`
 ## Data
 
 The course datasets were not provided, so the data was assembled independently from two public English datasets.
-Full processing notes: `data/raw/readme.md`.
+**Everything about the data** (sources, LLM translation, labelling scheme, complete statistics, external data) is in
+`docs/DATASET.md`. The datasets themselves are not in this repository (licences); the scripts that prepared them are in
+`scripts/data_sources/` and `src/training/prepare_data.py`.
 
 | Dataset | Where to get it | Labels | Use here |
 |---|---|---|---|

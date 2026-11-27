@@ -6,7 +6,8 @@
     POST /jobs                   start a run with the confirmed mapping
     GET  /jobs/{id}              stages and progress
     GET  /jobs/{id}/results      first 50 predictions per model, metrics, report
-    GET  /jobs/{id}/files/{name} predictions.csv, evaluation.csv, report.md, details.csv, metrics.json, log.txt, all.zip
+    GET  /jobs/{id}/files/{name} output_04.csv (Id, label), label_key.txt, predictions.csv, evaluation.csv, report.md,
+                                 details.csv, metrics.json, log.txt, all.zip
 
 Every limit is enforced here (the website only displays it). Local run:
     uvicorn api.app:app --port 7860
@@ -184,5 +185,7 @@ def job_file(job_id: str, name: str):
     p = jobs.file_path(job, name)
     if p is None:
         return error(404, f"No file '{name}' for this job.")
+    if name in (settings.OUTPUT_FILE, "label_key.txt"):          # the evaluator's file keeps its exact name
+        return FileResponse(p, filename=name)
     stem = job.filename.rsplit(".", 1)[0][:60]
     return FileResponse(p, filename=f"{stem}_{name}")

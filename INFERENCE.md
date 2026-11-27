@@ -109,6 +109,8 @@ python inference.py -t "some comment" --json
 
 ## 3. Evaluator day: scoring a test file in about a minute
 
+> The final evaluation uses the website instead: <https://ecoconsensus.harshitagr42.com> turns `input.csv` (`Id`, `text`) into `output_04.csv` (`Id`, `label`; 0 = favour, 1 = neutral, 2 = against). See the README, "Final evaluation". This section is for running the same system locally.
+
 1. **Put the file in `data/test/`** (create the folder if needed). Keep only one data file there.
 2. **Look at it:** `python inference.py --inspect`. It prints the file's columns, the first 5 rows, the distinct values in the likely label column, the configuration it would use, whether a claim / statement column was found, and the **run type**: `EVALUATION` (stance column found) or `PREDICTION ONLY`. It runs no model.
 3. **Fix the configuration if the guess is wrong**, either by editing the `CONFIG` block at the top of `inference.py` or by adding flags to the command (flags win over the block, and the block wins over auto-detection).

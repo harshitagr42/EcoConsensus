@@ -201,9 +201,8 @@ function renderMapping() {
     tr("Row ID", colSelect("c-id", "Row number (1, 2, 3, …)", g.id), "Copied to the prediction file."),
   );
   // output style
-  const styles = (state.limits && state.limits.output_styles) ||
-    { file: "same values as the uploaded file", ps: "Favour / None / Against", numeric: "our ids 0 / 1 / 2" };
-  $("#style").replaceChildren(...Object.entries(styles).map(([k, v]) => el("option", { value: k, text: `Predictions as ${v}` })));
+  $("#style").replaceChildren(...Object.entries(outputStyles()).map(([k, v]) => el("option", { value: k, text: `Labels as ${v}` })));
+  $("#style").value = "numeric";
   $("#style").onchange = validate;
   renderLabelTable();
   validate();
@@ -213,7 +212,9 @@ function renderLabelTable() {
   const u = state.upload;
   const col = $("#c-label").value;
   $("#labels-block").hidden = !col;
-  $("#style").value = col ? "file" : "ps";
+  const fileOpt = $('#style option[value="file"]');           // "same values as your file" needs a stance column
+  if (fileOpt) fileOpt.disabled = !col;
+  if (!col && $("#style").value === "file") $("#style").value = "numeric";
   if (!col) return;
   const vals = u.values[col];
   const body = $("#labelmap tbody");
@@ -285,10 +286,10 @@ function validate() {
 
   // plain-language plan
   const style = m.output_style;
-  const styleText = { file: "the same values as your file", ps: "Favour / None / Against", numeric: "our ids 0 / 1 / 2" }[style];
-  $("#style-note").textContent = style === "file"
-    ? "Uses your mapping in reverse, e.g. if your 0 means neutral, a neutral prediction is written as 0."
-    : style === "numeric" ? "0 = favour, 1 = neutral (None), 2 = against." : "";
+  const styleText = style === "file" ? "the same values as your file" : outputStyles()[style];
+  $("#style-note").textContent = (style === "file"
+    ? "Uses your mapping in reverse, e.g. if your 0 means neutral, a neutral prediction is written as 0. "
+    : "") + `Used in ${outputFile()} (columns Id, label) and every other prediction file. Default: 0 = favour, 1 = neutral, 2 = against.`;
   const parts = [`${state.upload.rows.toLocaleString()} rows; comments from “${m.comment_col || "?"}”`,
     m.claim_col ? `claim from “${m.claim_col}”` : "the default claim",
     m.label_col ? `true stance from “${m.label_col}” (${Object.entries(m.label_map).filter(([, v]) => v)
@@ -386,10 +387,18 @@ async function loadResults() {
     stat(ens ? fmt(ens.macro_f1) : "—", "ensemble Macro-F1"),
     stat(`${Math.round(d.elapsed)} s`, "processing time"),
   );
-  // downloads
+  // downloads: the evaluator's file first, with what its labels mean
   const base = `${API}/jobs/${state.jobId}/files/`;
-  $("#downloads").replaceChildren(...Object.entries(d.files).map(([name, desc]) =>
-    el("a", { class: name === "all.zip" ? "btn" : "btn ghost", href: base + encodeURIComponent(name), title: desc, text: `⬇ ${name}` })));
+  const outName = r.output_file || outputFile();
+  const key = r.label_key || { 0: "0", 1: "1", 2: "2" };
+  $("#output-file").replaceChildren(
+    el("div", {}, el("strong", { text: outName }), ` — the prediction file for the evaluator: columns `,
+      el("code", { text: "Id" }), ", ", el("code", { text: "label" }), `, ${r.rows.toLocaleString()} rows in the same order and with the same Ids as your file.`),
+    el("div", { class: "small" }, "Label key: ", el("code", { text: `${key[0]} = favour` }), " ",
+      el("code", { text: `${key[1]} = neutral (none)` }), " ", el("code", { text: `${key[2]} = against` })),
+    el("div", { class: "actions" }, el("a", { class: "btn", href: base + encodeURIComponent(outName), text: `⬇ Download ${outName}` })));
+  $("#downloads").replaceChildren(...Object.entries(d.files).filter(([name]) => name !== outName).map(([name, desc]) =>
+    el("a", { class: "btn ghost", href: base + encodeURIComponent(name), title: desc, text: `⬇ ${name}` })));
   // metrics
   $("#metrics-block").hidden = !(r.metrics && r.metrics.length);
   if (r.metrics && r.metrics.length) {
@@ -442,6 +451,13 @@ async function loadResults() {
 }
 
 // ---------------------------------------------------------------- start
+function outputStyles() {
+  return (state.limits && state.limits.output_styles) || {
+    numeric: "0 / 1 / 2 (0 = favour, 1 = neutral, 2 = against)", lower: "favour / neutral / against",
+    upper: "FAVOR / NONE / AGAINST", ps: "Favour / None / Against", file: "same values as the uploaded file" };
+}
+function outputFile() { return (state.limits && state.limits.output_file) || "output_04.csv"; }
+
 function reset() {
   clearTimeout(state.poll);
   state.upload = null;

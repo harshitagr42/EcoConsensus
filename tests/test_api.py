@@ -112,7 +112,7 @@ def test_no_label_needs_confirmation_and_unmapped_values_are_rejected(client):
     r = client.post("/jobs", json=dict(upload_id=up["upload_id"], comment_col="Comment Text", confirm_no_labels=True))
     st = wait(client, r.json()["id"])
     res = client.get(f"/jobs/{st['id']}/results").json()["results"]
-    assert st["status"] == "done" and res["metrics"] == [] and res["output_style"] == "ps"
+    assert st["status"] == "done" and res["metrics"] == [] and res["output_style"] == "numeric"
 
 
 def test_limits_are_enforced_on_the_server(client, monkeypatch):
@@ -175,3 +175,29 @@ def test_visitor_ip_comes_from_cloudflare(client):
     assert client.get("/limits", headers=a).json()["you"]["left_this_hour"] == 1
     other = {"CF-Connecting-IP": "203.0.113.2", "X-Forwarded-For": "203.0.113.1"}     # spoofed XFF is ignored
     assert client.get("/limits", headers=other).json()["you"]["left_this_hour"] == 2
+
+
+def test_evaluator_output_file(client):
+    """input.csv (Id, text) -> output_04.csv (Id, label): same Ids in the same order, labels 0/1/2 by default,
+    another spelling on request, and a label key."""
+    rows = [("x9", "global warming is a hoax"), ("007", "Climate change is a serious threat, act now"),
+            ("a1", "I had pasta for lunch"), ("b2", "   ")]
+    csv = pd.DataFrame(rows, columns=["Id", "text"]).to_csv(index=False).encode()
+    up = client.post("/inspect", files={"file": ("input.csv", csv, "text/csv")}).json()
+    assert up["guess"]["id"] == "Id" and up["guess"]["comment"] == "text" and up["guess"]["label"] is None
+    for style, allowed in (("numeric", {"0", "1", "2"}), ("upper", {"FAVOR", "NONE", "AGAINST"})):
+        body = dict(upload_id=up["upload_id"], comment_col="text", id_col="Id", confirm_no_labels=True)
+        if style != "numeric":
+            body["output_style"] = style                         # numeric is the default
+        st = wait(client, client.post("/jobs", json=body).json()["id"])
+        assert st["status"] == "done", st
+        r = client.get(f"/jobs/{st['id']}/files/{settings.OUTPUT_FILE}")
+        assert r.status_code == 200 and settings.OUTPUT_FILE in r.headers["content-disposition"]
+        out = pd.read_csv(pd.io.common.StringIO(r.text), dtype=str, keep_default_na=False)
+        assert list(out.columns) == ["Id", "label"]
+        assert out["Id"].tolist() == ["x9", "007", "a1", "b2"]          # unchanged, same order, empty text included
+        assert set(out["label"]) <= allowed and all(out["label"])
+        key = client.get(f"/jobs/{st['id']}/files/label_key.txt").text
+        assert "favour" in key and "against" in key
+        res = client.get(f"/jobs/{st['id']}/results").json()["results"]
+        assert res["output_file"] == settings.OUTPUT_FILE and set(res["label_key"].values()) == allowed

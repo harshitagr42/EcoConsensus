@@ -34,8 +34,12 @@
       <input type="file" id="file" accept=".csv,text/csv">
       <span id="drop-text">Choose a CSV file or drop it here</span>
     </label>
-    <p class="muted small">Needed: one column with the comments. Optional: a column with the true stance (for metrics),
-      a claim column, an ID column. You confirm every column and label value in the next step.</p>
+    <p class="muted small">Evaluation file: <code>input.csv</code> with the columns <code>Id</code> and <code>text</code>
+      (both are recognised automatically). The result is <code>output_04.csv</code> with the columns <code>Id</code> and
+      <code>label</code>, in the same order and with the same Ids. Label key: <code>0</code> = favour,
+      <code>1</code> = neutral, <code>2</code> = against (another spelling can be chosen before the run).</p>
+    <p class="muted small">Other files work too: one column with the comments is needed; a true-stance column (for
+      metrics), a claim column and an ID column are optional. You confirm every column and label value in the next step.</p>
   </section>
 
   <!-- 2. mapping -->
@@ -65,7 +69,7 @@
       <ul id="label-msgs" class="msgs"></ul>
     </div>
 
-    <h3>Prediction format</h3>
+    <h3>Label format of the predictions</h3>
     <select id="style"></select>
     <p class="muted small" id="style-note"></p>
 
@@ -92,6 +96,8 @@
   <section class="card" id="step-results" hidden>
     <h2><span class="num">4</span> Results</h2>
     <div class="stats" id="stats"></div>
+    <div id="output-file" class="note"></div>
+    <h3>Other files</h3>
     <div id="downloads" class="downloads"></div>
 
     <div id="metrics-block" hidden>

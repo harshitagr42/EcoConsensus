@@ -31,6 +31,9 @@ UPLOADS_PER_IP_PER_HOUR = _num("UPLOADS_PER_IP_PER_HOUR", 30)   # file previews 
 QUEUE_MAX = _num("QUEUE_MAX", 5)                           # waiting jobs; one runs at a time
 RESULT_TTL_HOURS = _num("RESULT_TTL_HOURS", 6.0)           # uploads and results are deleted after this
 ALLOWED_EXT = (".csv",)
+# The evaluator's prediction file: output_<group id>.csv with the columns Id and label
+GROUP_ID = os.environ.get("GROUP_ID", "04")
+OUTPUT_FILE = f"output_{GROUP_ID}.csv"
 
 ALLOWED_ORIGINS = [o.strip().rstrip("/") for o in os.environ.get(
     "ALLOWED_ORIGINS", "https://ecoconsensus.harshitagr42.com").split(",") if o.strip()]
@@ -45,4 +48,4 @@ DEVICE = os.environ.get("DEVICE", "cpu")
 def public() -> dict:
     return dict(max_rows=MAX_ROWS, max_file_mb=MAX_FILE_MB, jobs_per_ip_per_hour=JOBS_PER_IP_PER_HOUR,
                 jobs_per_day=JOBS_PER_DAY, uploads_per_ip_per_hour=UPLOADS_PER_IP_PER_HOUR, queue_max=QUEUE_MAX,
-                result_ttl_hours=RESULT_TTL_HOURS, file_types=list(ALLOWED_EXT))
+                result_ttl_hours=RESULT_TTL_HOURS, file_types=list(ALLOWED_EXT), output_file=OUTPUT_FILE)
