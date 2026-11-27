@@ -80,5 +80,5 @@ print(
 )
 
 
-# values of entailment are improved with the help of cluade and gemini ai since they were either 0 or 1 only
+# values of entailment are improved with the help of Claude Opus 5.5 (Anthropic) since they were either 0 or 1 only
 # news values 0 = agrees, 1 = neutral, 2 = agains

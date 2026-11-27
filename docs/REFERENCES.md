@@ -8,7 +8,7 @@ Every external library, model, dataset and LLM used in this project. Copy this l
 
 - **Pol-NLI** (training data). Burnham, M., Kahn, K., Wang, R. Y., and Peng, R. X. (2024). *Political DEBATE: Efficient Zero-shot and Few-shot Classifiers for Political Text.* arXiv:2409.02078. Dataset: Hugging Face `mlburnham/Pol_NLI`. The dataset page states no license; check the terms before publishing the data. This project uses a subset (3,517 training and 90 validation rows) produced by `data/raw/original/pol_nli_data/process_pol_nli.py`, with the `entailment` column read as 0 favour, 1 none, 2 against.
 - **SemEval-2016 Task 6** (own test set and experiments only). Mohammad, S. M., Kiritchenko, S., Sobhani, P., Zhu, X., and Cherry, C. (2016). *SemEval-2016 Task 6: Detecting Stance in Tweets.* In Proceedings of the 10th International Workshop on Semantic Evaluation (SemEval-2016), pp. 31–41. Companion article: Mohammad, S. M., Sobhani, P., and Kiritchenko, S. (2017). *Stance and Sentiment in Tweets.* ACM Transactions on Internet Technology 17(3), Article 26. arXiv:1605.01655.
-- **Hindi and Bengali versions** of both datasets are machine translations made once with an LLM. The Pol-NLI three-class labels were refined from binary entailment labels with the help of an LLM (Claude), so they are silver labels. *translation LLM: antropics, cluade Opus and 5.5, November 2026*
+- **Hindi and Bengali versions** of both datasets are machine translations made once with an LLM. The Pol-NLI three-class labels were refined from binary entailment labels with the help of an LLM (Claude Opus 5.5), so they are silver labels. *translation LLM: antropics, cluade Opus and 5.5, November 2026*
 
 ## Models
 

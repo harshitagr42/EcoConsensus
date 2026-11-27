@@ -129,7 +129,7 @@ The course datasets were not provided, so the data was assembled independently f
   translated into the wrong language, `data/raw/translated/Bagheli/`, is never used.)
 - **Pol-NLI labels are low quality.** Pol-NLI only has binary entailment labels for hypotheses such as "Climate change is
   (not) a serious concern". The negated hypotheses were rewritten and their labels flipped, and the three-class stance
-  labels (favour / neutral / against) were then produced **with the help of an LLM (Claude)**. They are silver labels, not
+  labels (favour / neutral / against) were then produced **with the help of an LLM (Claude Opus 5.5)**. They are silver labels, not
   human annotations. This is why Pol-NLI is used only for training and the human-labelled SemEval tweets are kept for testing.
 - **Duplicates were removed.** 1,417 Pol-NLI rows repeated another row's English text, and 64 train groups matched a
   `val` or SemEval sentence (`src/training/prepare_data.py`).
